@@ -1,0 +1,12 @@
+name: Staging
+variables:
+  - name: baseUrl
+    value: https://balance-alyc.homo.invertironline.com
+  - secret: true
+    name: trustedServiceSecret
+  - name: bankAccountId
+    value: "1"
+  - name: clientId
+    value: "1"
+  - name: status
+    value: PendingVerification

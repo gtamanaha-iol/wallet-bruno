@@ -1,0 +1,12 @@
+opencollection: 1.0.0
+info:
+  name: "Guille"
+  type: workspace
+
+collections:
+  - name: "Balance.Alyc"
+    path: "collections/Balance.Alyc"
+
+specs:
+
+docs: ''

@@ -1,0 +1,12 @@
+name: Produccion
+variables:
+  - name: baseUrl
+    value: https://balance-alyc.invertironline.com
+  - secret: true
+    name: trustedServiceSecret
+  - name: bankAccountId
+    value: "1"
+  - name: clientId
+    value: "1"
+  - name: status
+    value: PendingVerification

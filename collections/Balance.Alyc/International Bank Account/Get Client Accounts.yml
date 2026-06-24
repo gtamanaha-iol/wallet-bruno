@@ -1,0 +1,15 @@
+info:
+  name: Get Client Accounts
+  type: http
+  seq: 5
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api/v1/international-bank-account/client/{{clientId}}"
+  auth: none
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
