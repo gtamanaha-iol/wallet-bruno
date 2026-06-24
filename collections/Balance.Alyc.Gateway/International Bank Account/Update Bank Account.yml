@@ -1,0 +1,33 @@
+info:
+  name: Update Bank Account
+  type: http
+  seq: 3
+
+http:
+  method: PATCH
+  url: "{{baseUrl}}/api/v1/international-bank-account/{{bankAccountId}}"
+  auth: bearer
+
+auth:
+  bearer:
+    token: "{{token}}"
+
+body:
+  type: json
+  content: |
+    {
+      "accountHolderName": null,
+      "bankAccountNumber": null,
+      "currencyId": null,
+      "bankId": null,
+      "observation": null,
+      "isFavorite": null,
+      "routingNumber": null,
+      "abaIban": null
+    }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

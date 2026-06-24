@@ -1,0 +1,33 @@
+info:
+  name: Create International Bank Account
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/international-bank-account"
+  auth: bearer
+
+auth:
+  bearer:
+    token: "{{token}}"
+
+body:
+  type: json
+  content: |
+    {
+      "clientId": 0,
+      "accountHolderName": "John Doe",
+      "bankAccountNumber": "123456789",
+      "currencyId": null,
+      "bankId": 0,
+      "isFavorite": false,
+      "routingNumber": "021000021",
+      "abaIban": "US12345678901234567890"
+    }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

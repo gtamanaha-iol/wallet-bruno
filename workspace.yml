@@ -6,6 +6,8 @@ info:
 collections:
   - name: "Balance.Alyc"
     path: "collections/Balance.Alyc"
+  - name: "Balance.Alyc.Gateway"
+    path: "collections/Balance.Alyc.Gateway"
 
 specs:
 
