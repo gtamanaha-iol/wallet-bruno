@@ -6,16 +6,14 @@ info:
 http:
   method: PATCH
   url: "{{baseUrl}}/api/v1/international-bank-account/{{bankAccountId}}/status"
-  auth: none
-
-body:
-  type: json
-  content: |
-    {
-      "newStatus": "Accepted",
-      "changedBy": 0,
-      "observation": null
-    }
+  body:
+    type: json
+    data: |-
+      {
+        "newStatus": "Rejected",
+        "changedBy": 0,
+        "observation": null
+      }
 
 settings:
   encodeUrl: true

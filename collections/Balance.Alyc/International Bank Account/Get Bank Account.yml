@@ -6,7 +6,6 @@ info:
 http:
   method: GET
   url: "{{baseUrl}}/api/v1/international-bank-account/{{bankAccountId}}"
-  auth: none
 
 settings:
   encodeUrl: true

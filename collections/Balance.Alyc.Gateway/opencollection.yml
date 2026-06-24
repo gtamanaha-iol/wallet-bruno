@@ -6,6 +6,12 @@ request:
   scripts:
     - type: before-request
       code: |
+        const trustedServiceBaseUrl = bru.getEnvVar('trustedServiceBaseUrl');
+        const resolvedUrl = req.url.replace(/\{\{(\w+)\}\}/g, (_, name) => bru.getEnvVar(name) || bru.getVar(name) || '');
+        if (trustedServiceBaseUrl && resolvedUrl.startsWith(trustedServiceBaseUrl)) {
+          return;
+        }
+
         const clientId = bru.getEnvVar('clientId');
         const clientSecret = bru.getEnvVar('clientSecret');
         const identityServerUrl = bru.getEnvVar('identityServerUrl');

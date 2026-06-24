@@ -1,0 +1,10 @@
+info:
+  name: "02 - Protected (auto-signed)"
+  type: folder
+  seq: 2
+
+request:
+  auth: none
+  scripts:
+    - type: before-request
+      code: "const CryptoJS = require('crypto-js');\nconst secret = bru.getEnvVar('trustedServiceSecret');\nconst timestamp = Math.floor(Date.now() / 1000).toString();\nconst method = req.method.toUpperCase();\nconst rawUrl = req.url.replace(/\\{\\{(\\w+)\\}\\}/g, (_, name) => bru.getEnvVar(name) || bru.getVar(name) || '');\nconst pathStart = rawUrl.indexOf('/', rawUrl.indexOf('//') + 2);\nconst requestPath = pathStart !== -1 ? rawUrl.slice(pathStart) : '/';\nlet bodyStr = '';\ntry { if (req.body && typeof req.body === 'object') { bodyStr = JSON.stringify(req.body, null, 2); } } catch(e) {}\nconst bodyHashHex = CryptoJS.SHA256(bodyStr).toString(CryptoJS.enc.Hex);\nconst hmacMessage = method + requestPath + bodyHashHex + timestamp;\nconst signature = CryptoJS.HmacSHA256(hmacMessage, secret).toString(CryptoJS.enc.Base64);\nreq.setHeader('X-IOL-Timestamp', timestamp);\nreq.setHeader('X-IOL-Signature', signature);"

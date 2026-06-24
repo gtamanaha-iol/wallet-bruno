@@ -6,21 +6,19 @@ info:
 http:
   method: PATCH
   url: "{{baseUrl}}/api/v1/international-bank-account/{{bankAccountId}}"
-  auth: none
-
-body:
-  type: json
-  content: |
-    {
-      "accountHolderName": null,
-      "bankAccountNumber": null,
-      "currencyId": null,
-      "bankId": null,
-      "observation": null,
-      "isFavorite": null,
-      "routingNumber": null,
-      "abaIban": null
-    }
+  body:
+    type: json
+    data: |-
+      {
+        "clientId": 887257,
+        "accountHolderName": "account 2 updated",
+        "bankAccountNumber": "123456789",
+        "currencyId": null,
+        "bankId": 2605,
+        "isFavorite": true,
+        "routingNumber": "021000021",
+        "abaIban": "US12345678901234567890"
+      }
 
 settings:
   encodeUrl: true

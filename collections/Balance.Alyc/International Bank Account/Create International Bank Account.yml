@@ -6,21 +6,19 @@ info:
 http:
   method: POST
   url: "{{baseUrl}}/api/v1/international-bank-account"
-  auth: none
-
-body:
-  type: json
-  content: |
-    {
-      "clientId": 0,
-      "accountHolderName": "John Doe",
-      "bankAccountNumber": "123456789",
-      "currencyId": null,
-      "bankId": 0,
-      "isFavorite": false,
-      "routingNumber": "021000021",
-      "abaIban": "US12345678901234567890"
-    }
+  body:
+    type: json
+    data: |-
+      {
+        "clientId": 887257,
+        "accountHolderName": "account 2",
+        "bankAccountNumber": "123456789",
+        "currencyId": null,
+        "bankId": 2605,
+        "isFavorite": true,
+        "routingNumber": "021000021",
+        "abaIban": "US12345678901234567890"
+      }
 
 settings:
   encodeUrl: true

@@ -1,0 +1,14 @@
+info:
+  name: Sin headers X-IOL-* -> 401
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api/v1/international-bank-account/{{bankAccountId}}"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

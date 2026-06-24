@@ -1,7 +1,7 @@
 name: Staging
 variables:
   - name: baseUrl
-    value: http://balance-alyc-gateway.homo.invertironline.com
+    value: https://balance-alyc-gateway.homo.invertironline.com
   - name: identityServerUrl
     value: https://identity-server-homologacion.invertironline.com
   - name: clientId
@@ -11,8 +11,12 @@ variables:
   - secret: true
     name: token
   - name: bankAccountId
-    value: "1"
+    value: "16"
   - name: accountClientId
-    value: "1"
+    value: "887257"
   - name: status
     value: PendingVerification
+  - name: trustedServiceBaseUrl
+    value: https://balance-alyc.homo.invertironline.com
+  - secret: true
+    name: trustedServiceSecret

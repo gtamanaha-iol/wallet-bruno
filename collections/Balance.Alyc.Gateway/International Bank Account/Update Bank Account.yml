@@ -6,25 +6,19 @@ info:
 http:
   method: PATCH
   url: "{{baseUrl}}/api/v1/international-bank-account/{{bankAccountId}}"
-  auth: bearer
-
-auth:
-  bearer:
-    token: "{{token}}"
-
-body:
-  type: json
-  content: |
-    {
-      "accountHolderName": null,
-      "bankAccountNumber": null,
-      "currencyId": null,
-      "bankId": null,
-      "observation": null,
-      "isFavorite": null,
-      "routingNumber": null,
-      "abaIban": null
-    }
+  body:
+    type: json
+    data: |-
+      {
+        "clientId": 887257,
+        "accountHolderName": "Kurt Cobain updated",
+        "bankAccountNumber": "1122334455",
+        "currencyId": null,
+        "bankId": 0,
+        "isFavorite": true,
+        "routingNumber": "021000021",
+        "abaIban": "US12345678901234567890"
+      }
 
 settings:
   encodeUrl: true

@@ -1,0 +1,21 @@
+info:
+  name: Solo X-IOL-Timestamp (sin firma) -> 401
+  type: http
+  seq: 2
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api/v1/international-bank-account/{{bankAccountId}}"
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |-
+        const timestamp = Math.floor(Date.now() / 1000).toString();
+        req.setHeader('X-IOL-Timestamp', timestamp);
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

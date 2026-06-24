@@ -1,0 +1,19 @@
+info:
+  name: "GET /api/v1/international-bank-account/:id - 200 OK"
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api/v1/international-bank-account/{{bankAccountId}}"
+  auth: none
+
+assert:
+  - expr: res.status
+    assert: neq 401
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

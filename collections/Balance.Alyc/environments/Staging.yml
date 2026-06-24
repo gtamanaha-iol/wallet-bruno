@@ -5,8 +5,8 @@ variables:
   - secret: true
     name: trustedServiceSecret
   - name: bankAccountId
-    value: "1"
+    value: "15"
   - name: clientId
-    value: "1"
+    value: "887257"
   - name: status
     value: PendingVerification

@@ -8,6 +8,8 @@ collections:
     path: "collections/Balance.Alyc"
   - name: "Balance.Alyc.Gateway"
     path: "collections/Balance.Alyc.Gateway"
+  - name: "IOL.Gateway"
+    path: "collections/IOL.Gateway"
 
 specs:
 

@@ -16,3 +16,7 @@ variables:
     value: "1"
   - name: status
     value: PendingVerification
+  - name: trustedServiceBaseUrl
+    value: https://balance-alyc.invertironline.com
+  - secret: true
+    name: trustedServiceSecret

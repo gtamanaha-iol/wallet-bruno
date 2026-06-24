@@ -1,0 +1,33 @@
+info:
+  name: Timestamp invalido (no es numero) -> 401
+  type: http
+  seq: 6
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api/v1/international-bank-account/{{bankAccountId}}"
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |-
+        const CryptoJS = require('crypto-js');
+        const secret = bru.getEnvVar('trustedServiceSecret');
+        const timestamp = Math.floor(Date.now() / 1000).toString();
+        const method = req.method.toUpperCase();
+        const rawUrl = req.url.replace(/\{\{(\w+)\}\}/g, (_, name) => bru.getEnvVar(name) || bru.getVar(name) || '');
+        const pathStart = rawUrl.indexOf('/', rawUrl.indexOf('//') + 2);
+        const requestPath = pathStart !== -1 ? rawUrl.slice(pathStart) : '/';
+        let bodyStr = '';
+        try { if (req.body && typeof req.body === 'object') { bodyStr = JSON.stringify(req.body, null, 2); } } catch(e) {}
+        const bodyHashHex = CryptoJS.SHA256(bodyStr).toString(CryptoJS.enc.Hex);
+        const hmacMessage = method + requestPath + bodyHashHex + timestamp;
+        const signature = CryptoJS.HmacSHA256(hmacMessage, secret).toString(CryptoJS.enc.Base64);
+        req.setHeader('X-IOL-Timestamp', 'bad-timestamp');
+        req.setHeader('X-IOL-Signature', signature);
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
