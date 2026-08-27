@@ -1,0 +1,14 @@
+name: Homo - Business (PJ)
+variables:
+  - name: baseUrl
+    value: https://gateway.app.homo.invertironline.com
+  - name: identityServerUrl
+    value: https://api-gat-app-homologacion.invertironline.com
+  - name: username
+    value: registro_1194254
+  - secret: true
+    name: password
+  - secret: true
+    name: token
+  - name: bankAccountDestinationId
+    value: "61464044"

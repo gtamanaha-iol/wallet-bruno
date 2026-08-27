@@ -1,0 +1,47 @@
+info:
+  name: Extraer
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/ExtraccionAutomatica/Extraer"
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "idCliente": 887257,
+        "tipoCuenta": 1,
+        "tipoExtraccion": 2,
+        "importe": 100.0,
+        "idCuentaBancariaDelClienteDestino": 0
+      }
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: lt
+      value: "500"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  # ExtraccionAutomatica / Extraer
+
+  Extraccion simple (cashout) en HOMOLOGACION.
+
+  `ExtraccionAutomaticaController` NO tiene `[Authorize]` y no hay FallbackPolicy
+  global, por lo que el endpoint es anonimo: no requiere token.
+
+  Campos (ver `ExtraccionRequest` y enums):
+  - `tipoCuenta`: TipoCuentaPaisMoneda (1 = Inversion_Argentina_Pesos)
+  - `tipoExtraccion`: TipoExtraccion (2 = TRANSFERENCIA_ELECTRONICA)
+  - `importe`: debe ser > 0
+  - Completar `idCliente` e `idCuentaBancariaDelClienteDestino` con datos reales de homo.

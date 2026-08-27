@@ -1,0 +1,13 @@
+opencollection: "1.0.0"
+
+info:
+  name: CashOut
+  summary: "IOL CashOut (extracciones) - pruebas en HOMOLOGACION"
+
+bundled: false
+
+extensions:
+  bruno:
+    ignore:
+      - node_modules
+      - .git

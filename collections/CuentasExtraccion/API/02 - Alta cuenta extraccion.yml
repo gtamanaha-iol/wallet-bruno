@@ -1,0 +1,64 @@
+info:
+  name: 02 - Alta cuenta extraccion
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/CuentasExtraccion/AltaCuentaExtraccion"
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "idCliente": 1195589,
+        "moneda": 1,
+        "tipoIdentificacionCuentaRetiro": 1024,
+        "identificadorCuentaRetiro": "0150540501000112409930",
+        "tipoCuentaBancaria": 1
+      }
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  # AltaCuentaExtraccion
+
+  Alta **sin** segundo factor. Es el endpoint que usa corenet para el alta por alias.
+
+  `POST api/v1/CuentasExtraccion/AltaCuentaExtraccion`
+
+  Campos (`AltaCuentaExtraccionRequest`):
+
+  | Campo | Enum | Valores |
+  |---|---|---|
+  | `moneda` | `Monedas` | 1 = PesosArgentinos, 2 = DolaresUsa |
+  | `tipoIdentificacionCuentaRetiro` | `TiposIdentificacionesCuentaRetiro` | 1 = NumeroCbu, 2 = AliasCbuCvu, 3 = NumeroCvu, **1024 = Autodetectar** |
+  | `tipoCuentaBancaria` | `TiposCuentaBancaria` | 1 = CajaAhorro, 2 = CuentaCorriente, 3 = CuentaVirtual |
+
+  Conviene dejar `1024` (Autodetectar): el servicio deduce CBU/CVU/alias del identificador.
+  Mandar un tipo explicito que no coincida con el identificador real hace que el validador
+  de formato y el endpoint de BIND no se correspondan.
+
+  ## Si devuelve "El cliente ya tiene asociada la cuenta bancaria"
+
+  `BuscarCuentaDuplicada` bloquea si el cliente ya tiene ese CBU en esa moneda en estado
+  `Aceptada (1)`, `PendienteDeVerificacion (0)` o `PendienteDeAprobacionManual (6)`.
+  Correr el **CLEAN** para dar de baja las cuentas y poder repetir el alta.
+
+  ## Alta con 2FA
+
+  El otro camino es `POST api/v1/BankAccount/RegisterBankAccount`, que valida un codigo de
+  segundo factor contra User Management antes de crear la cuenta. Para pruebas repetidas
+  este endpoint es mas comodo porque no hay que generar el codigo.

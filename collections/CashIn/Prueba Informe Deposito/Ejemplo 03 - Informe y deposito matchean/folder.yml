@@ -1,0 +1,83 @@
+info:
+  name: Ejemplo 03 - Informe y deposito matchean
+  type: folder
+  seq: 3
+
+request:
+  scripts:
+    - type: before-request
+      code: |-
+        // ---------------------------------------------------------------------
+        // Que prueba esta carpeta: informe cargado ANTES de la transferencia.
+        // ---------------------------------------------------------------------
+        //   1. Se carga el informe de deposito (el cliente declara la transferencia)
+        //   2. Llega la transferencia bancaria -> matchea contra ese informe -> acredita
+        //
+        // Como el informe existe y es candidato unico, CashIn reusa esa fila de
+        // tcl_cuenta_deposito (no crea un espejo). No hay estado "pendiente"
+        // intermedio que sobreviva: matcheo y acreditacion pasan en el mismo paso.
+        //   tcl_cuenta_deposito.Estadoxx                  1 (Pendiente) -> 2 (Confirmado)
+        //   tcl_movimiento_recaudadora.id_estado_interno  llega directo a 3 (Terminado)
+        //
+        // ---------------------------------------------------------------------
+        // Cliente de prueba: DNI 23153715 (homo), IdCliente 1083525
+        // ---------------------------------------------------------------------
+        // Tiene una unica CC activa candidata (341121): no hay cotitulares ni otras
+        // cuentas que compitan, asi que el SP de matcheo no tiene que desempatar.
+        // Verificado en WAL-806 (carpeta "5 - Regresion - camino feliz") como
+        // control de regresion limpio: con y sin fix, mismo resultado.
+        //
+        // Importe: HARDCODEADO en los dos requests (5217). Tiene que ser IGUAL en
+        // los dos, es la clave exacta que usa el SP de matcheo. Si volves a correr
+        // esta carpeta y el informe anterior quedo sin consumir, o subi el numero
+        // o limpialo:
+        //
+        //   SELECT ID_Deposito, Montoxxx, Estadoxx FROM tcl_Cuenta_Deposito
+        //   WHERE ID_Cliente = 1083525 AND Montoxxx = 5217 AND Estadoxx = 1;
+        // ---------------------------------------------------------------------
+
+        // ---------------------------------------------------------------------
+        // Fecha del informe: la hora actual, unos minutos atras
+        // ---------------------------------------------------------------------
+        // Validar() rechaza Fecha >= DateTime.Now (FECHA_MAYOR) y
+        // Fecha < now-3meses (FECHA_INVALIDA). O sea: tiene que ser pasado, pero
+        // del mismo dia para caer en la ventana de dias habiles del SP de matcheo.
+        //
+        // No sirve {{$isoTimestamp}} ni toISOString(): los dos dan UTC, y el server
+        // compara contra DateTime.Now local (UTC-3), asi que llegaria 3hs en el
+        // futuro y lo rechaza. Hay que armar el string con los getters LOCALES.
+        const d = new Date(Date.now() - 5 * 60 * 1000);
+        const p = n => String(n).padStart(2, '0');
+        const fechaInforme = d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate())
+                           + 'T' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+        bru.setVar('fechaInforme', fechaInforme);
+
+        console.log('[EjemploInformeYDeposito] fecha informe = ' + fechaInforme
+                  + ' | importe 5217 (hardcodeado)');
+
+        // Token (client_credentials, scope MS-CASHIN).
+        // Mismo identity y client para local y homo: las cuentas de prueba son
+        // datos de la base de homo, asi que la API local tiene que levantarse con
+        // ASPNETCORE_ENVIRONMENT=HOMOLOGACION.
+        const identityUrl  = bru.getEnvVar('identityUrl');
+        const clientId     = bru.getEnvVar('clientId');
+        const clientSecret = bru.getEnvVar('clientSecret');
+
+        if (!identityUrl || !clientId || !clientSecret) {
+          throw new Error('[Auth] falta seleccionar un environment (local u homo)');
+        }
+
+        const axios = require('axios');
+        const tokenBody = 'grant_type=client_credentials'
+                        + '&client_id=' + encodeURIComponent(clientId)
+                        + '&client_secret=' + encodeURIComponent(clientSecret)
+                        + '&scope=MS-CASHIN';
+
+        const tokenRes = await axios.post(identityUrl + '/connect/token', tokenBody, {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        });
+
+        if (!tokenRes.data.access_token) {
+          throw new Error('[Auth] sin access_token: ' + JSON.stringify(tokenRes.data));
+        }
+        req.setHeader('Authorization', 'Bearer ' + tokenRes.data.access_token);

@@ -1,0 +1,37 @@
+name: Homologacion
+
+variables:
+  - name: baseUrl
+    value: https://cuentasextraccion-api-homologacion.invertironline.com
+
+  # Identity de homologacion. El client de pruebas necesita el scope MS-CEX
+  # habilitado: es el que valida el servicio (ApiIdentityServerConfig.RequiredScopes).
+  - name: identityUrl
+    value: https://identity-server-homologacion.invertironline.com
+  - name: clientId
+    value: GT-TEST
+  - name: clientSecret
+    value: gt-secret-value
+  - name: scope
+    value: MS-CEX
+
+  # Upstreams del valorizado de WAL-640. El token para estos necesita los DOS
+  # scopes: tenencia reenvia el Authorization a operatoria-simple para pedir el MEP
+  # con el que convierte los activos en dolares, asi que sin MS-OS el portafolio
+  # devuelve 500.
+  - name: tenenciaUrl
+    value: https://tenencia-cliente-api.homo.invertironline.com
+  - name: quotesUrl
+    value: https://operatoria-simple.app.homo.invertironline.com
+  - name: scopeValorizado
+    value: MS-TEN MS-OS
+
+  # Datos de prueba por defecto. Ver 09-casos-de-prueba-homo.md en
+  # MO.API.CuentasExtraccion/local_docs/features/wal-640-aprobacion-automatica/
+  - name: idCliente
+    value: "1195589"
+  - name: idCuenta
+    value: "613911"
+  # Clientes que el CLEAN da de baja. Separados por coma.
+  - name: clientesDePrueba
+    value: "1195589,1035817,1189924,104310,617764,1201112,1201113,1193358,979714,949925,505258,887257"

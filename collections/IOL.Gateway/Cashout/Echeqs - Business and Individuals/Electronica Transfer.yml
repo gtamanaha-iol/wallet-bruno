@@ -1,0 +1,23 @@
+info:
+  name: Electronica Transfer
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{baseUrl}}/withdrawals"
+  body:
+    type: json
+    data: |
+      {
+        "accountType": "ARG_ARS",
+        "withdrawalType": "TRANSFERENCIA_ELECTRONICA",
+        "amount": 100,
+        "bankAccountDestinationId": {{bankAccountDestinationId}}
+      }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

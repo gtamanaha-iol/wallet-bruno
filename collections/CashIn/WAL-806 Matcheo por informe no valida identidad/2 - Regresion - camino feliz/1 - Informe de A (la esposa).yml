@@ -1,0 +1,47 @@
+info:
+  name: "1 - Informe de A (la esposa)"
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1.0/Depositos/ConfirmarInformeDeposito"
+  auth: inherit
+  body:
+    type: json
+    data: |-
+      {
+        "ID": 0,
+        "IdCliente": 1083525, // DNI: 23153715, CC: 341121
+        "Importe": {{importeCorrecto}},
+        "IdMoneda": 1,
+        "IdBancoOrigen": 11,
+        "IdBancoDestino": 27,
+        "BancoDestinoSucursal": "",
+        "Fecha": "{{fechaInforme}}",
+        "NroComprobante": "806{{$timestamp}}",
+        "IdTipoCuenta": 1,
+        "IdCuentaDestino": 1,
+        "Cbu": "0170099900000000000017",
+        "CuitCuil": "",
+        "IdTipoDeposito": 3
+      }
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.body.responseType
+      operator: eq
+      value: "success"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  Paso 1/2. El caso principal hecho BIEN: A carga su propio informe ANTES de transferir.
+  B no tiene informe por este importe.

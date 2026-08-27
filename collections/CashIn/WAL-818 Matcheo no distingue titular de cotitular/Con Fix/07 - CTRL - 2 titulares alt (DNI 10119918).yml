@@ -1,0 +1,47 @@
+info:
+  name: "07 - CTRL - 2 titulares alt (DNI 10119918)"
+  type: http
+  seq: 7
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1.0/Fondos/DepositarMovimientoRecaudadora"
+  auth: inherit
+  body:
+    type: json
+    data: |-
+      {
+        "Dni": "10119918",
+        "Comprobante": "WAL818-CONFIX-CTRL2-{{$timestamp}}",
+        "Importe": 1007.07,
+        "Referencia": "VARVarios",
+        "IdRecaudadora": 1,
+        "Pais": 54,
+        "TipoCuenta": 1,
+        "Moneda": 1,
+        "TipoDepositoFondo": 3,
+        "TipoMovimiento": 1,
+        "EstadoOperacion": 1,
+        "FechaMovimiento": "{{$isoTimestamp}}",
+        "FechaTransferencia": "{{$isoTimestamp}}",
+        "ConceptoOperacion": "Credito por Transferencia",
+        "NombreOrdenante": "TEST WAL818",
+        "CuentaBancariaDestino": { "CBU": "0270100010036331160017" },
+        "CuentaBancariaOrigen": { "CBU": "0170099900000000000017" }
+      }
+
+# control. Candidatas: CC 143105 y 143103, las dos titulares. Igual que el caso 06: mismo resultado antes y despues del fix (143105).
+#
+# Se acredita en los dos escenarios; lo que cambia es EN QUE CC.
+# Verificar con verify-homo.sql.
+assert:
+  - expr: res.status
+    assert: eq 200
+  - expr: res.body.responseType
+    assert: eq success
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

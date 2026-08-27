@@ -1,0 +1,50 @@
+opencollection: 1.0.0
+
+info:
+  name: IOL.Gateway
+config:
+  proxy:
+    inherit: true
+    config:
+      protocol: http
+      hostname: ""
+      port: ""
+      auth:
+        username: ""
+        password: ""
+      bypassProxy: ""
+
+request:
+  scripts:
+    - type: before-request
+      code: |-
+        const identityServerUrl = bru.getEnvVar('identityServerUrl');
+        const username = bru.getEnvVar('username');
+        const password = bru.getEnvVar('password');
+
+        const axios = require('axios');
+        const body = `grant_type=password&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
+
+        try {
+          const response = await axios.post(`${identityServerUrl}/token`, body, {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+          });
+
+          const token = response.data.access_token_api_terceros || response.data.access_token;
+          if (token) {
+            bru.setEnvVar('token', token);
+            req.setHeader('Authorization', 'Bearer ' + token);
+          } else {
+            console.error('[Auth] No token in response:', JSON.stringify(response.data));
+          }
+        } catch (err) {
+          const detail = err.response ? JSON.stringify(err.response.data) : err.message;
+          console.error('[Auth] Token request failed:', detail);
+          throw new Error(`Token request failed: ${detail}`);
+        }
+bundled: false
+extensions:
+  bruno:
+    ignore:
+      - node_modules
+      - .git

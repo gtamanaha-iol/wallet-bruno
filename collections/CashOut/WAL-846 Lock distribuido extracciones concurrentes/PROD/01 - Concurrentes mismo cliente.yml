@@ -1,0 +1,117 @@
+info:
+  name: 01 - Concurrentes mismo cliente
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: http://10.0.6.162/healthcheck
+  headers:
+    - name: Content-Type
+      value: application/json
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        const axios = require('axios');
+
+        const CANTIDAD = 10;
+        // const urls = ['http://10.0.6.162', 'http://10.0.6.149'];
+        const urls = ['https://cashout-api.invertironline.com'];
+
+        const token = bru.getVar('accessToken');
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+
+        const idCliente = 3882912;
+
+        const body = {
+          idCliente: idCliente,
+          tipoCuenta: 1,
+          tipoExtraccion: 2,
+          importe: 1,
+          idCuentaBancariaDelClienteDestino: 0 //3428980
+        };
+
+        console.log(`INICIO idCliente ${idCliente} (CANTIDAD=${CANTIDAD})`);
+
+        const enCurso = r => JSON.stringify(r.data).toLowerCase().includes('en curso');
+
+        const resumen = (respData) => {
+          if (respData && respData.error) return `error: ${respData.error}`;
+          const d = (respData && respData.data) || {};
+          const mensaje = d.message || (Array.isArray(d.resultDescriptions) && d.resultDescriptions[0] && d.resultDescriptions[0].value) || '';
+          return `result=${d.result} | ${mensaje}`;
+        };
+
+        const marcasEnvio = [];
+        let nro = 0;
+
+        const hora = () => {
+          const d = new Date();
+          return d.toTimeString().substring(0, 8) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+        };
+
+        // Round-robin sobre las instancias directas: sin esto, todos los pedidos
+        // pegan a la misma IP y el burst no prueba nada entre instancias.
+        const pedido = () => {
+          const etiqueta = ++nro;
+          const targetUrl = urls[(etiqueta - 1) % urls.length] + '/api/v1/ExtraccionAutomatica/Extraer';
+          console.log(`  -> #${etiqueta} ENVIADO ${hora()} -> ${targetUrl}`);
+          marcasEnvio.push(Date.now());
+          return axios.post(targetUrl, body, { headers, validateStatus: () => true })
+            .then(r => ({ etiqueta, status: r.status, data: r.data }))
+            .catch(e => ({ etiqueta, status: 0, data: { error: e.message } }));
+        };
+
+        const respuestas = await Promise.all(Array.from({ length: CANTIDAD }, pedido));
+        respuestas.forEach(r => console.log(`  <- #${r.etiqueta} HTTP ${r.status}: ${resumen(r.data)}`));
+
+        const dispersionEnvioMs = CANTIDAD > 1 ? Math.max(...marcasEnvio) - Math.min(...marcasEnvio) : 0;
+        console.log(`[WAL-846 PROD] dispersion de envio: ${dispersionEnvioMs}ms (${CANTIDAD} pedidos)`);
+        if (CANTIDAD > 1 && dispersionEnvioMs > 100) {
+          console.log('[WAL-846 PROD] OJO: los pedidos NO salieron simultaneos. El resultado no prueba concurrencia.');
+        }
+
+        const caidas = respuestas.filter(r => r.status === 0).length;
+        const rechazadas = respuestas.filter(enCurso).length;
+        const aceptadas = respuestas.length - rechazadas - caidas;
+
+        // 2) Control: terminada la rafaga el lock tiene que estar liberado.
+
+        console.log(`[WAL-846 PROD] ${aceptadas} aceptada(s), ${rechazadas} rechazada(s), ${caidas} sin respuesta`);
+
+        if (aceptadas > 1) {
+          console.log(`[WAL-846 PROD] FALLA: ${aceptadas} aceptadas. Con varias instancias esto significa que el lock NO es distribuido (o WAL-846 no esta deployado en esta instancia).`);
+        }
+
+        bru.setVar('wal846_prod_aceptadas', aceptadas);
+        bru.setVar('wal846_prod_dispersion', dispersionEnvioMs);
+  assertions:
+    - expression: bru.getVar("wal846_prod_aceptadas")
+      operator: eq
+      value: "1"
+    - expression: bru.getVar("wal846_prod_liberado")
+      operator: eq
+      value: "true"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  # PROD — concurrentes mismo cliente
+
+  `CANTIDAD` extracciones en paralelo con `idCliente=3882912`, contra
+  produccion real (`cashout-api.invertironline.com`). `CANTIDAD` se toma de
+  la variable de environment `cantidadProd` (environment `Produccion`) —
+  cambiar ahi, no en el script.
+
+  **Esperado:** 1 aceptada, CANTIDAD-1 rechazadas. Despues, un pedido mas que
+  debe pasar (confirma que el lock se libero).
+
+  **OJO:** movimientos y transferencias reales. Arrancar con `cantidadProd=1`
+  o `2` antes de un burst grande. Ver `folder.yml` para el checklist previo.

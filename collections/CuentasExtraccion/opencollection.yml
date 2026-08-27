@@ -1,0 +1,13 @@
+opencollection: "1.0.0"
+
+info:
+  name: CuentasExtraccion
+  summary: "MO.API.CuentasExtraccion - alta, baja y reconsulta de cuentas de extraccion, y las pruebas de WAL-640"
+
+bundled: false
+
+extensions:
+  bruno:
+    ignore:
+      - node_modules
+      - .git

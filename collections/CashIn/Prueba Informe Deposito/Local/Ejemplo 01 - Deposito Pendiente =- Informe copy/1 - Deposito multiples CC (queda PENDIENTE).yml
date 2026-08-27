@@ -1,0 +1,41 @@
+info:
+  name: 1 - Deposito multiples CC (queda PENDIENTE)
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: http://localhost:5000/api/v1.0/Fondos/DepositarMovimientoRecaudadora
+  body:
+    type: json
+    data: |-
+      {
+        "Dni": "10087401",
+        "Comprobante": "INF126",
+        "Importe": 126,
+        "Referencia": "",
+        "IdRecaudadora": 1,
+        "Pais": 54,
+        "TipoCuenta": 1,
+        "Moneda": 1,
+        "TipoDepositoFondo": 3,
+        "TipoMovimiento": 1,
+        "EstadoOperacion": 1,
+        "FechaMovimiento": "{{$isoTimestamp}}",
+        "FechaTransferencia": "{{$isoTimestamp}}",
+        "ConceptoOperacion": "Credito por Transferencia",
+        "NombreOrdenante": "TEST INFORME DEPOSITO",
+        "CuentaBancariaDestino": {
+          "CBU": "0270006910000096430016"
+        },
+        "CuentaBancariaOrigen": {
+          "CBU": "0110016730001609207765"
+        }
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

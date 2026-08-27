@@ -1,0 +1,28 @@
+info:
+  name: 00 - Healthcheck
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: "{{baseUrl}}/healthcheck"
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  # Healthcheck
+
+  Endpoint anonimo. Sirve para confirmar que el `baseUrl` del environment apunta a algo
+  vivo antes de pelearse con el token.
+
+  Devuelve el estado de la conexion a MSSQL entre las `entries`.

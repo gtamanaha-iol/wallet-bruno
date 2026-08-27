@@ -1,0 +1,14 @@
+info:
+  name: Portfolio USD
+  type: http
+  seq: 5
+
+http:
+  method: GET
+  url: "{{tenenciaBaseUrl}}/portfolio/887257/USA"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

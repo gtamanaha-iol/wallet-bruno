@@ -1,0 +1,22 @@
+name: Produccion
+
+variables:
+  - name: baseUrl
+    value: https://cashout-api.invertironline.com
+  - name: baseUrlProd
+    value: https://cashout-api.invertironline.com
+  - name: identityUrl
+    value: https://identity-server.invertironline.com
+  - name: clientId
+    value: MS-CASHOUT
+  # El endpoint es anonimo (ver folder.yml de WAL-846), asi que puede quedar
+  # vacio: el script de auth avisa por consola y sigue sin Authorization.
+  - name: clientSecret
+    value: ""
+  - name: scope
+    value: MS-CASHOUT
+  # Cuantas veces correr la rafaga del caso 01. Configurable aca para no
+  # tener que editar el script cada vez. Arrancar bajo (1-2) antes de un
+  # burst grande: esto pega contra produccion real.
+  - name: cantidadProd
+    value: "1"

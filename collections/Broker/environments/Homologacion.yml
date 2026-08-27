@@ -1,0 +1,24 @@
+name: Homologacion
+variables:
+  - name: gatewayBaseUrl
+    value: https://gateway.app.homo.invertironline.com
+  - name: identityServerUrl
+    value: https://api-gat-app-homologacion.invertironline.com
+  - name: username
+    value: registro_887257
+  - name: password
+    value: testeo123
+  - name: tenenciaBaseUrl
+    value: https://tenencia-clientes-homologacion.invertironline.com
+  - name: identityUrl
+    value: https://identity-server-homologacion.invertironline.com
+  - name: clientId
+    value: GT-TEST
+  - name: clientSecret
+    value: gt-secret-value
+  - name: tenenciaScope
+    value: MS-OS MS-TEN
+  - name: tenenciaToken
+    value: eyJhbGciOiJSUzI1NiIsImtpZCI6IjNBNDdDOTFFREE1M0U2MjBENzVFRUQ2RTc5RkRGQjdFIiwidHlwIjoiYXQrand0In0.eyJuYmYiOjE3ODc4NTUxMTEsImV4cCI6MTc4Nzg1ODcxMSwiaXNzIjoiaHR0cHM6Ly9pZGVudGl0eS1zZXJ2ZXItaG9tb2xvZ2FjaW9uLmludmVydGlyb25saW5lLmNvbSIsImF1ZCI6WyJNUy1PUyIsIk1TLVRFTiIsIklPTC1QUkVPUkRFUlMiXSwiY2xpZW50X2lkIjoiR1QtVEVTVCIsImlhdCI6MTc4Nzg1NTExMSwic2NvcGUiOlsiTVMtT1MiLCJNUy1URU4iXX0.P-KuxxjKEwUjIpRh3ylFGodZZcGEmuISXZLrGehWIhTSmZd6VKna2EPPLCgKrD435YTHPyIo7rFaKWBwKuQ02I1TC0CUnkVgkLq4A_ulIk_GrR-3M1-g1-Q8pR_rvsOS10s67Gx2xwA8luY_V7T3gTEq4y5nzXU6xypPEo3x8kPBuFK0BlUfHtx-KO112tVtODNKiQZS9UQ5Z0iOORT1gsOpUj5rDEZXzkI4RHL_j63wlDBgIONE_WvrMOTeh1Z42Bam-fkOIO_nxnhqX5BqPKwD111Ocb8uUdYMGdiNrOkDPnV2a2BOt5MHqzUPze1yXBwQdxINprWpHmqNWFPJLQ
+  - name: gatewayToken
+    value: ""

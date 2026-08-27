@@ -1,0 +1,11 @@
+name: Produccion
+variables:
+  - name: baseUrl
+    value: https://proxybind-api.invertironline.com
+    description: Base del ProxyBindApi en produccion
+  - name: idCuenta
+    value: 20-1-627664-1-5
+    description: Cuenta extractora BIND en formato banco (ARS prod = CuentaBancariaBindPesos)
+  - name: idTransferencia
+    value: 1-33707852459-000000074650576-1
+    description: Ejemplo real completado (mov 74708429, 2026-08-27). Reemplazar por el que se quiera consultar.

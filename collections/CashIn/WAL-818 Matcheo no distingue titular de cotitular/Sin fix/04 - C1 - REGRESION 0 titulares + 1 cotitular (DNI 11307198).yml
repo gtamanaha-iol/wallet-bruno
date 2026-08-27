@@ -1,0 +1,47 @@
+info:
+  name: "04 - C1 - REGRESION 0 titulares + 1 cotitular (DNI 11307198)"
+  type: http
+  seq: 4
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1.0/Fondos/DepositarMovimientoRecaudadora"
+  auth: inherit
+  body:
+    type: json
+    data: |-
+      {
+        "Dni": "11307198",
+        "Comprobante": "WAL818-SINFIX-C1-{{$timestamp}}",
+        "Importe": 1004.04,
+        "Referencia": "VARVarios",
+        "IdRecaudadora": 1,
+        "Pais": 54,
+        "TipoCuenta": 1,
+        "Moneda": 1,
+        "TipoDepositoFondo": 3,
+        "TipoMovimiento": 1,
+        "EstadoOperacion": 1,
+        "FechaMovimiento": "{{$isoTimestamp}}",
+        "FechaTransferencia": "{{$isoTimestamp}}",
+        "ConceptoOperacion": "Credito por Transferencia",
+        "NombreOrdenante": "TEST WAL818",
+        "CuentaBancariaDestino": { "CBU": "0270100010036331160017" },
+        "CuentaBancariaOrigen": { "CBU": "0170099900000000000017" }
+      }
+
+# forma (c). Candidatas: CC 26849 cotitular (2016-12) y CC 217582 cta-retiro (2020-11). SIN FIX: TitularCC -> 26849. Con SP-only se pierde TitularCC y CuentaMasNueva elige 217582 = REGRESION. CON FIX (fallback): vuelve a 26849.
+#
+# Se acredita en los dos escenarios; lo que cambia es EN QUE CC.
+# Verificar con verify-homo.sql.
+assert:
+  - expr: res.status
+    assert: eq 200
+  - expr: res.body.responseType
+    assert: eq success
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

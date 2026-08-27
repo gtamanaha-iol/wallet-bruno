@@ -1,0 +1,7 @@
+info:
+  name: Con Fix
+  type: folder
+  seq: 2
+
+request:
+  auth: inherit

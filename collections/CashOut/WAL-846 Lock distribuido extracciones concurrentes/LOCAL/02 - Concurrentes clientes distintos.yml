@@ -1,0 +1,133 @@
+info:
+  name: 02 - Concurrentes clientes distintos
+  type: http
+  seq: 2
+
+http:
+  method: GET
+  url: "{{baseUrlHomo}}/healthcheck"
+  headers:
+    - name: Content-Type
+      value: application/json
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        // Contracara del caso 01: el lock es POR CLIENTE, no global.
+        // 5 clientes distintos en paralelo tienen que pasar TODOS.
+        const axios = require('axios');
+
+        // Clientes de homo con saldo verificado al 2026-08-04 (SaldCuen de tcl_cuenta).
+        // La API local apunta a la misma base, asi que son los mismos que en HOMO.
+        //   idCliente | CC (NumeCuen) | ID_CuenComi | SaldCuen
+        //   ----------+---------------+-------------+------------------
+        //     887257  |    212714     |   266187    | 200.106.855.679
+        //     392836  |     17690     |    42567    | 312.999.616.452
+        //    1197561  |    421002     |   474485    |       4.998.064
+        //    1198047  |  10000255     |   474766    |      99.998.359
+        //    1199993  |  10000981     |   475497    |      99.999.395
+        const CLIENTES = [887257, 392836, 1197561, 1198047, 1199993];
+
+        const url = bru.getEnvVar('baseUrlLocal') + '/api/v1/ExtraccionAutomatica/Extraer';
+
+        const token = bru.getVar('accessToken');
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+
+        // Hora local con ms, en el mismo formato que muestra New Relic, para poder
+        // cruzar el momento de envio con los logs del servicio.
+        const hora = () => {
+          const d = new Date();
+          return d.toTimeString().substring(0, 8) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+        };
+
+        const pedido = (idCliente) => {
+          console.log(`  -> cliente ${idCliente} ENVIADO ${hora()}`);
+          return axios.post(url, {
+            idCliente,
+            tipoCuenta: 1,
+            tipoExtraccion: 2,
+            importe: 1,
+            idCuentaBancariaDelClienteDestino: 0
+          }, { headers, validateStatus: () => true })
+            .then(r => ({ idCliente, status: r.status, data: r.data }))
+            .catch(e => ({ idCliente, status: 0, data: { error: e.message } }));
+        };
+
+        // Solo lo que importa para leer de un vistazo: si acepto o no, y el mensaje.
+        // Para rechazos el mensaje real vive en resultDescriptions[0].value (message
+        // viene null); para exitos viene en message directo.
+        const resumen = (respData) => {
+          if (respData && respData.error) return `error: ${respData.error}`;
+          const d = (respData && respData.data) || {};
+          const mensaje = d.message || (Array.isArray(d.resultDescriptions) && d.resultDescriptions[0] && d.resultDescriptions[0].value) || '';
+          return `result=${d.result} | ${mensaje}`;
+        };
+
+        const respuestas = await Promise.all(CLIENTES.map(pedido));
+        respuestas.forEach(r => console.log(`  <- cliente ${r.idCliente} HTTP ${r.status}: ${resumen(r.data)}`));
+
+        // "Aceptada" = genero movimiento. Un cliente sin saldo devuelve otro error
+        // y NO debe contarse como aceptada, o el test daria verde sin probar nada.
+        const texto = r => JSON.stringify(r.data).toLowerCase();
+        const rechazadasPorLock = respuestas.filter(r => texto(r).includes('en curso')).length;
+        const aceptadas = respuestas.filter(r =>
+          texto(r).includes('"result":true') || texto(r).includes('extracción generada')
+        ).length;
+        const otrosErrores = respuestas.length - rechazadasPorLock - aceptadas;
+
+        console.log(`[WAL-846 LOCAL MULTI] ${aceptadas} aceptada(s), ${rechazadasPorLock} rechazada(s) por lock, ${otrosErrores} con otro error`);
+        if (rechazadasPorLock > 0) {
+          console.log('[WAL-846 LOCAL MULTI] FALLA REAL: clientes distintos se bloquean entre si. Revisar la clave del lock.');
+        }
+        if (otrosErrores > 0) {
+          console.log('[WAL-846 LOCAL MULTI] Hay pedidos con otro error (saldo, cuenta, producto). No es problema del lock, pero invalida el caso: cambiar esos idCliente.');
+        }
+
+        bru.setVar('wal846_local_multi_rechazadas', rechazadasPorLock);
+        bru.setVar('wal846_local_multi_otros', otrosErrores);
+  assertions:
+    - expression: bru.getVar("wal846_local_multi_rechazadas")
+      operator: eq
+      value: "0"
+    - expression: bru.getVar("wal846_local_multi_otros")
+      operator: eq
+      value: "0"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  # LOCAL — clientes distintos, todas pasan
+
+  5 extracciones en paralelo con **5 `idCliente` distintos** contra `{{baseUrlLocal}}`.
+
+  **Esperado:** las 5 aceptadas, **0 rechazadas por lock**.
+
+  Verifica que el lock no frene de mas: un lock global (o con la clave mal armada)
+  haria pasar el caso 01 y fallaria este.
+
+  ## Clientes usados
+
+  Los mismos que el caso equivalente de HOMO — la API local apunta a la misma base.
+  Elegidos por **saldo estimado positivo** al 2026-08-04:
+
+  | idCliente | Saldo estimado |
+  |---|---|
+  | 887257  | 200.093.452.993 |
+  | 392836  | 313.003.445.949 |
+  | 1197561 | 4.995.563 |
+  | 1198047 | 99.998.329 |
+  | 1199993 | 99.992.291 |
+
+  Alternativas con saldo holgado: `1197453` (6.584.127.403.429), `1198531` (50.357.294).
+
+  ⚠️ **No usar** estos, tienen saldo negativo: `1200791` (-60,50), `1194254` (-2.241,50),
+  `1200070` (-431), `1066337` (-333.609), `749512` (-5.787.632).
+
+  ⚠️ Como local y homo comparten el Redis, **no corras este caso en paralelo con el
+  equivalente de HOMO**: los locks se pisan y los dos darian rechazos cruzados.

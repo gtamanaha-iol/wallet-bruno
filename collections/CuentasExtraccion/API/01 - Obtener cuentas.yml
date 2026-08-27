@@ -1,0 +1,68 @@
+info:
+  name: 01 - Obtener cuentas
+  type: http
+  seq: 2
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api/v1/CuentasExtraccion/ObtenerCuentasExtraccion/{{idCliente}}"
+  headers:
+    - name: Content-Type
+      value: application/json
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+  scripts:
+    - type: after-response
+      code: |-
+        // Resumen legible: una linea por cuenta, con el estado en texto.
+        const ESTADOS = {
+          0: 'PendienteDeVerificacion (Iniciada)',
+          1: 'Aceptada',
+          2: 'Rechazada',
+          3: 'Baja_Pendiente',
+          4: 'Baja',
+          5: 'Suspendida',
+          6: 'PendienteDeAprobacionManual'
+        };
+
+        const cuentas = (res.body && res.body.data) || [];
+        console.log(`Cliente ${bru.getEnvVar('idCliente')}: ${cuentas.length} cuenta(s)`);
+
+        for (const c of cuentas) {
+          const estado = ESTADOS[c.estadoCuentaBancaria] ?? c.estadoCuentaBancaria;
+          console.log(`  ${c.idCuenta} | banco ${c.idBanco} ${c.nombreBanco || ''} | ${c.numeroCbu} | moneda ${c.moneda} | ${estado}`);
+        }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  # ObtenerCuentasExtraccion
+
+  Lista las cuentas de extraccion de un cliente. Es el request que conviene correr
+  antes y despues de cada caso de prueba para ver el estado.
+
+  `GET api/v1/CuentasExtraccion/ObtenerCuentasExtraccion/{idCliente}`
+
+  Estados (`EstadosCuentaBancaria`):
+
+  | Valor | Nombre | En el front |
+  |---|---|---|
+  | 0 | `PendienteDeVerificacion` | Iniciada |
+  | 1 | `Aceptada` | Habilitada |
+  | 2 | `Rechazada` | |
+  | 3 | `Baja_Pendiente` | |
+  | 4 | `Baja` | |
+  | 5 | `Suspendida` | |
+  | 6 | `PendienteDeAprobacionManual` | (WAL-819/820) |
+
+  El campo `detalleResultadoValidacion` viene **null** hoy: el stored procedure
+  `scl_Cuenta_Bancaria_IOL` si devuelve la columna (`Detalle_Habilitacion_Cuenta`), pero
+  el repositorio no la mapea. Mapearla es parte del ticket de Front (regla 5 de WAL-640).

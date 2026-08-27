@@ -1,0 +1,11 @@
+name: Homologacion
+variables:
+  - name: baseUrl
+    value: https://proxybind-api-homologacion.invertironline.com
+    description: Base del ProxyBindApi en homologacion
+  - name: idCuenta
+    value: 20-1-735154-1-5
+    description: Cuenta extractora BIND en formato banco (ARS homo = CuentaBancariaBindPesos)
+  - name: idTransferencia
+    value: ""
+    description: ID_TransferenciaBind real, formato {1|5}-{CUIT}-{ID_Cuenta_Movim:15}-1

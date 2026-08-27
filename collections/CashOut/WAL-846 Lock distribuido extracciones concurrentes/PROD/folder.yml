@@ -1,0 +1,26 @@
+info:
+  name: PROD
+  type: folder
+  seq: 4
+
+docs: |
+  # PRODUCCION
+
+  Rafaga contra `cashout-api.invertironline.com`. A diferencia de HOMO/LOCAL,
+  esto genera **movimientos y transferencias reales** para un cliente real.
+
+  ## Antes de correr
+
+  - Confirmar saldo disponible del `idCliente` de prueba.
+  - Validar que `idCuentaBancariaDelClienteDestino` sea una cuenta real y
+    valida para ese cliente (en homo se usa `0` como dummy; en prod puede
+    no ser un valor aceptable o puede disparar una transferencia real).
+  - Arrancar con `cantidadProd` bajo (1-2) antes de escalar a un burst grande.
+  - Seguir la ventana/coordinacion de [plan-deploy.md](../../../../../git/wallet-docs/plan/WAL-846-lock-distribuido-redis/plan-deploy.md)
+    si esto es parte de la validacion post-deploy (pausar extracciones, banner,
+    avisar a fondos) en vez de una prueba puntual.
+
+  ## Cantidad configurable
+
+  `CANTIDAD` se lee de la variable de environment `cantidadProd` (ver
+  environment `Produccion`), no esta hardcodeada en el script.

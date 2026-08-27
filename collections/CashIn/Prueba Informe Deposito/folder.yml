@@ -1,0 +1,68 @@
+info:
+  name: Prueba Informe Deposito
+  type: folder
+  seq: 3
+
+request:
+  auth: none
+  scripts:
+    - type: before-request
+      code: |-
+        // ---------------------------------------------------------------------
+        // Que prueba esta carpeta (detalle de cada caso en su propio folder.yml)
+        // ---------------------------------------------------------------------
+        //   Ejemplo 01 - Deposito Pendiente => Informe
+        //     Deposito que NO puede matchear por multiples CC -> PENDIENTE,
+        //     se carga el informe apuntando a una CC, se reprocesan los
+        //     pendientes -> ahora SI matchea.
+        //   Ejemplo 02 - Deposito acreditado automaticamente
+        //     Deposito SIN informe previo -> deposito espejo -> acredita solo.
+        //   Ejemplo 03 - Informe y deposito matchean
+        //     Informe cargado antes -> llega la transferencia -> matchea directo.
+        // ---------------------------------------------------------------------
+        // Fecha del informe: la hora actual, unos minutos atras
+        // ---------------------------------------------------------------------
+        // Validar() rechaza Fecha >= DateTime.Now (FECHA_MAYOR) y
+        // Fecha < now-3meses (FECHA_INVALIDA). O sea: tiene que ser pasado, pero
+        // del mismo dia para caer en la ventana de dias habiles del SP de matcheo.
+        //
+        // No sirve {{$isoTimestamp}} ni toISOString(): los dos dan UTC, y el server
+        // compara contra DateTime.Now local (UTC-3), asi que llegaria 3hs en el
+        // futuro y lo rechaza. Hay que armar el string con los getters LOCALES.
+        //
+        // Los 5 minutos de margen cubren la diferencia de reloj entre esta maquina
+        // y el server. Asume que las dos estan en la misma zona horaria (UTC-3).
+        const d = new Date(Date.now() - 5 * 60 * 1000);
+        const p = n => String(n).padStart(2, '0');
+        const fechaInforme = d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate())
+                           + 'T' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+        bru.setVar('fechaInforme', fechaInforme);
+
+        console.log('[InformeDeposito] fecha informe = ' + fechaInforme);
+
+        // Token (client_credentials, scope MS-CASHIN).
+        // Mismo identity y client para local y homo: las cuentas de prueba son
+        // datos de la base de homo, asi que la API local tiene que levantarse con
+        // ASPNETCORE_ENVIRONMENT=HOMOLOGACION.
+        const identityUrl  = bru.getEnvVar('identityUrl');
+        const clientId     = bru.getEnvVar('clientId');
+        const clientSecret = bru.getEnvVar('clientSecret');
+
+        if (!identityUrl || !clientId || !clientSecret) {
+          throw new Error('[Auth] falta seleccionar un environment (local u homo)');
+        }
+
+        const axios = require('axios');
+        const tokenBody = 'grant_type=client_credentials'
+                        + '&client_id=' + encodeURIComponent(clientId)
+                        + '&client_secret=' + encodeURIComponent(clientSecret)
+                        + '&scope=MS-CASHIN';
+
+        const tokenRes = await axios.post(identityUrl + '/connect/token', tokenBody, {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        });
+
+        if (!tokenRes.data.access_token) {
+          throw new Error('[Auth] sin access_token: ' + JSON.stringify(tokenRes.data));
+        }
+        req.setHeader('Authorization', 'Bearer ' + tokenRes.data.access_token);

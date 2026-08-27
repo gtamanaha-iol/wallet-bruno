@@ -1,0 +1,17 @@
+name: Local
+variables:
+  - name: baseUrl
+    value: http://localhost:5000
+    description: ""
+  - name: identityUrl
+    value: https://identity-server-homologacion.invertironline.com
+    description: ""
+  - name: clientId
+    value: GT-TEST
+    description: ""
+  - name: clientSecret
+    value: gt-secret-value
+    description: ""
+  - name: runId
+    value: "45"
+    description: ""

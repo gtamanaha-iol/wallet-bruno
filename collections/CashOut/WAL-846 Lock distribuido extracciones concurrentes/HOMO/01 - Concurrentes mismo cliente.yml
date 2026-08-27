@@ -1,0 +1,138 @@
+info:
+  name: 01 - Concurrentes mismo cliente
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: "{{baseUrlHomo}}/healthcheck"
+  headers:
+    - name: Content-Type
+      value: application/json
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        // Rafaga de concurrentes contra HOMO, que corre 2 instancias.
+        // Con el lock distribuido funcionando debe pasar UNA sola, sin importar en
+        // que instancia caiga cada pedido. Con el lock in-process pasaban 2+ (una
+        // por proceso): eso es la falla que WAL-846 corrige.
+        // La request de arriba es solo un healthcheck para que Bruno tenga algo que
+        // ejecutar; todos los pedidos de extraccion salen de este script.
+        // (message:"*EXTRACCION_CONCURRENTE_DETECTADA*" OR message:"*Fin Extraccion Automatica*" OR message:"*Inicio Extraccion Automatica*") AND (message:*887257* OR message:*392836* OR message:*1197561* OR message:*1198047* OR message:*1199993*)
+        const axios = require('axios');
+
+        const CANTIDAD = 160;
+        const url = bru.getEnvVar('baseUrlHomo') + '/api/v1/ExtraccionAutomatica/Extraer';
+
+        const token = bru.getVar('accessToken');
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+
+        const idCliente = 1197561; // 887257 392836 1197561 1198047 1199993
+
+        const body = {
+          idCliente: idCliente,
+          tipoCuenta: 1,
+          tipoExtraccion: 2,
+          importe: 4000000,
+          idCuentaBancariaDelClienteDestino: 0
+        };
+
+        console.log(`INICIO idCliente ${idCliente}`);
+
+        const enCurso = r => JSON.stringify(r.data).toLowerCase().includes('en curso');
+
+        // Solo lo que importa para leer de un vistazo: si acepto o no, y el mensaje.
+        // Para rechazos el mensaje real vive en resultDescriptions[0].value (message
+        // viene null); para exitos viene en message directo.
+        const resumen = (respData) => {
+          if (respData && respData.error) return `error: ${respData.error}`;
+          const d = (respData && respData.data) || {};
+          const mensaje = d.message || (Array.isArray(d.resultDescriptions) && d.resultDescriptions[0] && d.resultDescriptions[0].value) || '';
+          return `result=${d.result} | ${mensaje}`;
+        };
+
+        // Se registra el instante en que sale cada pedido para poder verificar que
+        // realmente fueron simultaneos. Si la dispersion fuera de cientos de ms, los
+        // pedidos se estarian encolando y el test no probaria concurrencia.
+        const marcasEnvio = [];
+        let nro = 0;
+
+        // Hora local con ms, en el mismo formato que muestra New Relic, para poder
+        // cruzar el momento de envio con los logs del servicio.
+        const hora = () => {
+          const d = new Date();
+          return d.toTimeString().substring(0, 8) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+        };
+
+        const pedido = () => {
+          const etiqueta = ++nro;
+          console.log(`  -> #${etiqueta} ENVIADO ${hora()}`);
+          marcasEnvio.push(Date.now());
+          return axios.post(url, body, { headers, validateStatus: () => true })
+            .then(r => ({ etiqueta, status: r.status, data: r.data }))
+            .catch(e => ({ etiqueta, status: 0, data: { error: e.message } }));
+        };
+
+        // 1) Rafaga concurrente: solo una debe pasar.
+        // Array.from con factory invoca pedido() las 5 veces de inmediato, asi que las
+        // 5 promesas quedan en vuelo antes de que Promise.all empiece a esperar.
+        const respuestas = await Promise.all(Array.from({ length: CANTIDAD }, pedido));
+        respuestas.forEach(r => console.log(`  <- #${r.etiqueta} HTTP ${r.status}: ${resumen(r.data)}`));
+
+        const dispersionEnvioMs = Math.max(...marcasEnvio) - Math.min(...marcasEnvio);
+        console.log(`[WAL-846 HOMO] dispersion de envio: ${dispersionEnvioMs}ms (${CANTIDAD} pedidos)`);
+        if (dispersionEnvioMs > 100) {
+          console.log('[WAL-846 HOMO] OJO: los pedidos NO salieron simultaneos. El resultado no prueba concurrencia.');
+        }
+
+        const caidas = respuestas.filter(r => r.status === 0).length;
+        const rechazadas = respuestas.filter(enCurso).length;
+        const aceptadas = respuestas.length - rechazadas - caidas;
+
+        // 2) Control: terminada la rafaga el lock tiene que estar liberado.
+        const posterior = await pedido();
+        const liberado = !enCurso(posterior);
+
+        console.log(`[WAL-846 HOMO] ${aceptadas} aceptada(s), ${rechazadas} rechazada(s), ${caidas} sin respuesta`);
+        console.log(`[WAL-846 HOMO] pedido posterior HTTP ${posterior.status}: ${resumen(posterior.data)}`);
+
+        if (aceptadas > 1) {
+          console.log(`[WAL-846 HOMO] FALLA: ${aceptadas} aceptadas. Con 2 instancias esto significa que el lock NO es distribuido (o WAL-846 no esta deployado).`);
+        }
+
+        bru.setVar('wal846_homo_aceptadas', aceptadas);
+        bru.setVar('wal846_homo_liberado', liberado);
+        bru.setVar('wal846_homo_dispersion', dispersionEnvioMs);
+  assertions:
+    - expression: bru.getVar("wal846_homo_aceptadas")
+      operator: eq
+      value: "1"
+    - expression: bru.getVar("wal846_homo_liberado")
+      operator: eq
+      value: "true"
+    - expression: bru.getVar("wal846_homo_dispersion")
+      operator: lt
+      value: "100"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  # HOMO — concurrentes mismo cliente
+
+  5 extracciones en paralelo con el mismo `idCliente`, contra las 2 instancias de homo.
+
+  **Esperado:** 1 aceptada, 4 rechazadas. Despues, un pedido mas que debe pasar
+  (confirma que el `await using` libero el lock).
+
+  **Este es el caso que valida WAL-846.** Como homo balancea entre 2 procesos, un
+  resultado de 2+ aceptadas significa que cada proceso tiene su propio lock — o sea,
+  que el lock distribuido no esta funcionando.
+
+  Medido con la implementacion in-process el 2026-08-04: **3 de 5 aceptadas**.

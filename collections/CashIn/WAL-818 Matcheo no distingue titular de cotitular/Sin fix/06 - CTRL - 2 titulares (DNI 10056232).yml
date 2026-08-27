@@ -1,0 +1,47 @@
+info:
+  name: "06 - CTRL - 2 titulares (DNI 10056232)"
+  type: http
+  seq: 6
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1.0/Fondos/DepositarMovimientoRecaudadora"
+  auth: inherit
+  body:
+    type: json
+    data: |-
+      {
+        "Dni": "10056232",
+        "Comprobante": "WAL818-SINFIX-CTRL1-{{$timestamp}}",
+        "Importe": 1006.06,
+        "Referencia": "VARVarios",
+        "IdRecaudadora": 1,
+        "Pais": 54,
+        "TipoCuenta": 1,
+        "Moneda": 1,
+        "TipoDepositoFondo": 3,
+        "TipoMovimiento": 1,
+        "EstadoOperacion": 1,
+        "FechaMovimiento": "{{$isoTimestamp}}",
+        "FechaTransferencia": "{{$isoTimestamp}}",
+        "ConceptoOperacion": "Credito por Transferencia",
+        "NombreOrdenante": "TEST WAL818",
+        "CuentaBancariaDestino": { "CBU": "0270100010036331160017" },
+        "CuentaBancariaOrigen": { "CBU": "0170099900000000000017" }
+      }
+
+# control. Candidatas: CC 46466 (2019-08) y CC 50265 (2019-09), las dos titulares. TitularCC no desempata ni antes ni despues del fix, asi que CuentaMasNueva elige 50265 en los dos escenarios.
+#
+# Se acredita en los dos escenarios; lo que cambia es EN QUE CC.
+# Verificar con verify-homo.sql.
+assert:
+  - expr: res.status
+    assert: eq 200
+  - expr: res.body.responseType
+    assert: eq success
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

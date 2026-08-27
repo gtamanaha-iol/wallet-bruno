@@ -1,0 +1,54 @@
+info:
+  name: 04 - Baja cuenta
+  type: http
+  seq: 5
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/BajaCuentaExtraccion/EjecutarBajaCuentaExtraccion"
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "idCliente": 1195589,
+        "idCuenta": 613911,
+        "idAccion": 4
+      }
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  # EjecutarBajaCuentaExtraccion
+
+  Baja **logica** de una cuenta: no borra la fila, le cambia el estado.
+
+  `POST api/v1/BajaCuentaExtraccion/EjecutarBajaCuentaExtraccion`
+
+  | Campo | Que es |
+  |---|---|
+  | `idCliente` | Se usa para validar que la cuenta le pertenezca; si no, no hace nada |
+  | `idCuenta` | La cuenta a dar de baja |
+  | `idAccion` | **El estado destino.** Va directo como `@ID_Estado_Baja` al SP `scl_dtcl_Cuenta_Retiro_Baja_Logica` |
+
+  `idAccion: 4` = `Baja`. Es el que usa el CLEAN, porque `BuscarCuentaDuplicada` solo bloquea
+  los estados `Aceptada (1)`, `PendienteDeVerificacion (0)` y `PendienteDeAprobacionManual (6)`:
+  dejando la cuenta en `4` se puede volver a dar de alta el mismo CBU.
+
+  El servicio ademas pisa el motivo con `"CBU dado de baja por el cliente."` (la constante
+  `CBU_DEACTIVATED_BY_CUSTOMER`), asi que el `motivoOtro` del request se ignora.
+
+  ⚠️ Responde `200` con `mensaje: null` cuando la cuenta no existe o no es del cliente: no
+  distingue "no hice nada" de "di de baja". Hay que mirar el `mensaje` de la respuesta.

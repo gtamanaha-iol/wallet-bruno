@@ -1,0 +1,14 @@
+name: Local - Business (PJ)
+variables:
+  - name: baseUrl
+    value: http://localhost:5220
+  - name: identityServerUrl
+    value: https://api-gat-app-homologacion.invertironline.com
+  - name: username
+    value: registro_1194254
+  - secret: true
+    name: password
+  - secret: true
+    name: token
+  - name: bankAccountDestinationId
+    value: "612898"

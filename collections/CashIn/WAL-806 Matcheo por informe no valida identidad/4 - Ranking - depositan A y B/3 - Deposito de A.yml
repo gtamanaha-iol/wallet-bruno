@@ -1,0 +1,52 @@
+info:
+  name: "3 - Deposito de A"
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1.0/Fondos/DepositarMovimientoRecaudadora"
+  auth: inherit
+  body:
+    type: json
+    data: |-
+      {
+        "Dni": "23153715", // CC: 341121
+        "Comprobante": "WAL806-R{{runId}}-C8A-{{$timestamp}}",
+        "Importe": {{importeRankingCompleto}},
+        "Referencia": "",
+        "IdRecaudadora": 1,
+        "Pais": 54,
+        "TipoCuenta": 1,
+        "Moneda": 1,
+        "TipoDepositoFondo": 3,
+        "TipoMovimiento": 1,
+        "EstadoOperacion": 1,
+        "FechaMovimiento": "{{$isoTimestamp}}",
+        "FechaTransferencia": "{{$isoTimestamp}}",
+        "ConceptoOperacion": "Credito por Transferencia",
+        "NombreOrdenante": "TEST WAL806",
+        "CuentaBancariaDestino": { "CBU": "0270100010036331160017" },
+        "CuentaBancariaOrigen": { "CBU": "0170099900000000000017" }
+      }
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.body.responseType
+      operator: eq
+      value: "success"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  Paso 3/4. Como en el escenario 4: dos candidatos elegibles (informe propio + informe de B via
+  cotitular). CON FIX gana el de A por prioridad 1 -> CC 341121, nota vacia, consume su informe.
+  SIN FIX la eleccion es arbitraria (Rows[0], el SP no tiene ORDER BY) - puede salir bien o mal.
+  Si sale mal (toma el informe de B), se arrastra al paso 4 (ver ese request).

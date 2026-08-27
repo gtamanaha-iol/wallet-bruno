@@ -1,0 +1,22 @@
+info:
+  name: EcheqConsumerCopia/ObtenerEcheqPorId
+  type: http
+  seq: 2
+
+http:
+  method: GET
+  url: https://proxybind-api.invertironline.com/EcheqConsumerCopia/ObtenerEcheqPorId?idCuenta=20-1-627664-1-5&idCheque=RZP90XDK33P2EGJ
+  params:
+    - name: idCuenta
+      value: 20-1-627664-1-5
+      type: query
+    - name: idCheque
+      value: RZP90XDK33P2EGJ
+      type: query
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

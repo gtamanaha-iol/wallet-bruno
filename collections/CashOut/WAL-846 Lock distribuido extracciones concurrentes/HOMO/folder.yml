@@ -1,0 +1,24 @@
+info:
+  name: HOMO
+  type: folder
+  seq: 1
+
+docs: |
+  # HOMOLOGACION — 2 instancias
+
+  Homologacion corre **dos instancias** detras del balanceador, asi que estos casos
+  validan el lock **distribuido**: los pedidos concurrentes caen en procesos distintos
+  que comparten el Redis (`redis1-homologacion`, DB 2).
+
+  ## Como distinguir si el lock distribuido funciona
+
+  | Implementacion | Resultado de "01 - concurrentes mismo cliente" |
+  |---|---|
+  | WAL-845 (`ConcurrentDictionary` in-process) | **2+ aceptadas** — una por instancia |
+  | WAL-846 (RedLock sobre Redis) | **1 aceptada** |
+
+  Con el lock in-process se midio **3 de 5 aceptadas** contra homo (2026-08-04 15:03),
+  que es exactamente la falla que este ticket corrige.
+
+  Ojo: los movimientos que generan estos casos son **movimientos reales** de la base
+  de homologacion.

@@ -1,0 +1,14 @@
+name: Local - Individual (PF)
+variables:
+  - name: baseUrl
+    value: http://localhost:5220
+  - name: identityServerUrl
+    value: https://api-gat-app-homologacion.invertironline.com
+  - name: username
+    value: registro_887257
+  - secret: true
+    name: password
+  - secret: true
+    name: token
+  - name: bankAccountDestinationId
+    value: "516253"

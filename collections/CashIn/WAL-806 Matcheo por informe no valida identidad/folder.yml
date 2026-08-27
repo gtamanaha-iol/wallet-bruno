@@ -1,0 +1,81 @@
+info:
+  name: WAL-806 Matcheo por informe no valida identidad
+  type: folder
+  seq: 2
+
+request:
+  auth: none
+  scripts:
+    - type: before-request
+      code: |-
+        // Fecha del informe: Validar() rechaza request.Fecha >= DateTime.Now (FECHA_MAYOR) y
+        // request.Fecha < now-3meses (FECHA_INVALIDA). {{$isoTimestamp}} no sirve: es UTC y el
+        // server compara contra DateTime.Now (local, UTC-3), asi que llegaria 3hs en el futuro.
+        // Mandamos un naive local (sin Z) unas horas atras: pasado para Validar(), y el mismo dia
+        // para que caiga en la ventana de dia habil del SP de matcheo.
+        const fecha = new Date(Date.now() - 5 * 60 * 60 * 1000);
+        bru.setVar('fechaInforme', fecha.toISOString().slice(0, 19));
+
+        // Importes por corrida. El metodo 1 elige informe por monto exacto + banco destino +
+        // moneda + ventana de dias habiles, y nada mas. Los informes que quedan pendientes de
+        // una corrida (el paso 3 deja uno de A a proposito) siguen siendo candidatos en la
+        // siguiente: el deposito del paso 2 los consume por el metodo 1 y el descarte por
+        // identidad nunca llega a correr. Esperar al dia siguiente no alcanza — la ventana del
+        // SP llega hasta el dia habil siguiente + 1. Subiendo runId cada corrida queda aislada.
+        //
+        // runId 1 -> 100011.01 / 100012.02 / 100013.03 ...
+        // runId 2 -> 100021.01 / 100022.02 / 100023.03 ...
+        // La decena identifica la corrida, los decimales el escenario.
+        //
+        // El decimal es un ID estable de escenario y NO sigue el numero de carpeta
+        // (las carpetas estan ordenadas por importancia). Mapeo actual:
+        //   1 cruce garantizado      .09     4 ranking A y B        .08
+        //   2 camino feliz           .05     5 caso real            .01
+        //   3 cotitular de la CC     .02
+        //
+        // .06 (cuenta de terceros) se dio de baja: IdTipoCuenta=2 esta en desuso en
+        // produccion desde 2021 (ningun frontend actual puede generarlo, el Gateway
+        // hardcodea cuenta propia). Ver el caso 3 anterior en el historial de git.
+        const runId = Number(bru.getEnvVar('runId'));
+        if (!Number.isInteger(runId) || runId < 1 || runId > 99) {
+          throw new Error('[runId] tiene que ser un entero entre 1 y 99, llego: ' + bru.getEnvVar('runId'));
+        }
+        const base = 100000 + runId * 10;
+        bru.setVar('importeCruce',           (base + 9) + '.09');
+        bru.setVar('importeCorrecto',        (base + 5) + '.05');
+        bru.setVar('importeCotitularCC',     (base + 2) + '.02');
+        bru.setVar('importeRankingCompleto', (base + 8) + '.08');
+        bru.setVar('importeCaso',            (base + 1) + '.01');
+        console.log('[WAL806] runId=' + runId
+                  + ' | cruce ' + bru.getVar('importeCruce')
+                  + ' | correcto ' + bru.getVar('importeCorrecto')
+                  + ' | cotitularCC ' + bru.getVar('importeCotitularCC')
+                  + ' | rankingCompleto ' + bru.getVar('importeRankingCompleto')
+                  + ' | caso ' + bru.getVar('importeCaso'));
+
+        // Token (client_credentials, scope MS-CASHIN).
+        // Mismo identity y mismo client para local y homo: las cuentas de prueba son
+        // datos de la base de homo, asi que la API local tiene que levantarse con
+        // ASPNETCORE_ENVIRONMENT=HOMOLOGACION.
+        const identityUrl  = bru.getEnvVar('identityUrl');
+        const clientId     = bru.getEnvVar('clientId');
+        const clientSecret = bru.getEnvVar('clientSecret');
+
+        if (!identityUrl || !clientId || !clientSecret) {
+          throw new Error('[Auth] falta seleccionar un environment (local u homo)');
+        }
+
+        const axios = require('axios');
+        const tokenBody = 'grant_type=client_credentials'
+                        + '&client_id=' + encodeURIComponent(clientId)
+                        + '&client_secret=' + encodeURIComponent(clientSecret)
+                        + '&scope=MS-CASHIN';
+
+        const tokenRes = await axios.post(identityUrl + '/connect/token', tokenBody, {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        });
+
+        if (!tokenRes.data.access_token) {
+          throw new Error('[Auth] sin access_token: ' + JSON.stringify(tokenRes.data));
+        }
+        req.setHeader('Authorization', 'Bearer ' + tokenRes.data.access_token);

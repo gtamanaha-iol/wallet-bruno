@@ -1,0 +1,47 @@
+info:
+  name: Ejemplo 01 - Deposito Pendiente => Informe
+  type: folder
+  seq: 1
+
+request:
+  auth: inherit
+
+# ---------------------------------------------------------------------
+# Que prueba este ejemplo
+# ---------------------------------------------------------------------
+#   1. Llega una transferencia de un DNI con multiples CC candidatas -> PENDIENTE
+#   2. Se carga el informe de deposito apuntando a la CC correcta
+#   3. Se reprocesan los pendientes -> ahora SI matchea, en la CC del informe
+#
+# ---------------------------------------------------------------------
+# Cliente de prueba (homo)
+# ---------------------------------------------------------------------
+#   IdCliente (el que recibe, para el informe): 1200439
+#   DNI del titular de esa cuenta:              41073484
+#   DNI del ordenante (quien manda la plata):   36110381  <- cotitular de 1200439
+#   Cuenta comitente:                           10001197
+#
+# El DNI 36110381 es cotitular de la cuenta 1200439, pero ADEMAS es titular de
+# decenas de cuentas propias en homo. Scl_Obtener_Cuentas_A_Depositar_v2 le
+# devuelve count >> 1 -> PoseeMasDeUnaCuentaOCotitular = true -> el deposito
+# no puede resolver una unica CC -> queda PENDIENTE (paso 1), hasta que el
+# informe (paso 2) desambigua apuntando a la cuenta 1200439 / CC 10001197.
+#
+# ---------------------------------------------------------------------
+# OJO - gate de producto 65
+# ---------------------------------------------------------------------
+# Tcl_Cliente_Producto esta vacia en homo: ningun cliente tiene el producto 65,
+# asi que el gate 1 (whitelist) va a fallar ANTES de llegar al matcheo. Para
+# poder correr esta prueba:
+#   - Levantar el servicio con DisableWhiteList = true en App.config, o
+#   - Insertarle el producto 65 al cliente 1200439 en homo.
+#
+# ---------------------------------------------------------------------
+# Importe: HARDCODEADO en los pasos 1 y 2 (439). Tiene que ser IGUAL en los
+# dos - es la clave exacta que usa el SP de matcheo. Si volves a correr esta
+# carpeta y el informe anterior quedo sin consumir, o subi el numero o
+# limpialo:
+#
+#   SELECT ID_Deposito, Montoxxx, Estadoxx FROM tcl_Cuenta_Deposito
+#   WHERE ID_Cliente = 1200439 AND Montoxxx = 439 AND Estadoxx = 1;
+# ---------------------------------------------------------------------

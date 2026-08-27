@@ -1,0 +1,135 @@
+info:
+  name: 01 - Concurrentes mismo cliente
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: "{{baseUrlHomo}}/healthcheck"
+  headers:
+    - name: Content-Type
+      value: application/json
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        // Rafaga de concurrentes contra la instancia LOCAL (1 sola).
+        // Valida el lock dentro de un proceso. NO distingue in-process de RedLock:
+        // las dos implementaciones dan 1 aceptada aca. Para eso esta la carpeta HOMO.
+        // El healthcheck de arriba apunta a homo (cert valido) solo para que Bruno
+        // tenga algo que ejecutar; los pedidos de extraccion salen de este script.
+        const axios = require('axios');
+
+        const CANTIDAD = 5;
+        const url = bru.getEnvVar('baseUrlLocal') + '/api/v1/ExtraccionAutomatica/Extraer';
+
+        const token = bru.getVar('accessToken');
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+
+        const body = {
+          idCliente: 887257,
+          tipoCuenta: 1,
+          tipoExtraccion: 2,
+          importe: 1,
+          idCuentaBancariaDelClienteDestino: 0
+        };
+
+        const enCurso = r => JSON.stringify(r.data).toLowerCase().includes('en curso');
+
+        // Solo lo que importa para leer de un vistazo: si acepto o no, y el mensaje.
+        // Para rechazos el mensaje real vive en resultDescriptions[0].value (message
+        // viene null); para exitos viene en message directo.
+        const resumen = (respData) => {
+          if (respData && respData.error) return `error: ${respData.error}`;
+          const d = (respData && respData.data) || {};
+          const mensaje = d.message || (Array.isArray(d.resultDescriptions) && d.resultDescriptions[0] && d.resultDescriptions[0].value) || '';
+          return `result=${d.result} | ${mensaje}`;
+        };
+
+        // Se registra el instante en que sale cada pedido para poder verificar que
+        // realmente fueron simultaneos. Si la dispersion fuera de cientos de ms, los
+        // pedidos se estarian encolando y el test no probaria concurrencia.
+        const marcasEnvio = [];
+        let nro = 0;
+
+        // Hora local con ms, en el mismo formato que muestra New Relic, para poder
+        // cruzar el momento de envio con los logs del servicio.
+        const hora = () => {
+          const d = new Date();
+          return d.toTimeString().substring(0, 8) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+        };
+
+        const pedido = () => {
+          const etiqueta = ++nro;
+          console.log(`  -> #${etiqueta} ENVIADO ${hora()}`);
+          marcasEnvio.push(Date.now());
+          return axios.post(url, body, { headers, validateStatus: () => true })
+            .then(r => ({ etiqueta, status: r.status, data: r.data }))
+            .catch(e => ({ etiqueta, status: 0, data: { error: e.message } }));
+        };
+
+        // 1) Rafaga concurrente: solo una debe pasar.
+        // Array.from con factory invoca pedido() las 5 veces de inmediato, asi que las
+        // 5 promesas quedan en vuelo antes de que Promise.all empiece a esperar.
+        const respuestas = await Promise.all(Array.from({ length: CANTIDAD }, pedido));
+        respuestas.forEach(r => console.log(`  <- #${r.etiqueta} HTTP ${r.status}: ${resumen(r.data)}`));
+
+        const dispersionEnvioMs = Math.max(...marcasEnvio) - Math.min(...marcasEnvio);
+        console.log(`[WAL-846 LOCAL] dispersion de envio: ${dispersionEnvioMs}ms (${CANTIDAD} pedidos)`);
+        if (dispersionEnvioMs > 100) {
+          console.log('[WAL-846 LOCAL] OJO: los pedidos NO salieron simultaneos. El resultado no prueba concurrencia.');
+        }
+
+        const caidas = respuestas.filter(r => r.status === 0).length;
+        const rechazadas = respuestas.filter(enCurso).length;
+        const aceptadas = respuestas.length - rechazadas - caidas;
+
+        // 2) Control: terminada la rafaga el lock tiene que estar liberado.
+        const posterior = await pedido();
+        const liberado = !enCurso(posterior);
+
+        console.log(`[WAL-846 LOCAL] ${aceptadas} aceptada(s), ${rechazadas} rechazada(s), ${caidas} sin respuesta`);
+        console.log(`[WAL-846 LOCAL] pedido posterior HTTP ${posterior.status}: ${resumen(posterior.data)}`);
+
+        if (caidas > 0) {
+          console.log('[WAL-846 LOCAL] OJO: sin respuesta. Verificar que la API local este levantada con el perfil HTTP-only (ver docs de la carpeta LOCAL).');
+        }
+
+        bru.setVar('wal846_local_aceptadas', aceptadas);
+        bru.setVar('wal846_local_liberado', liberado);
+        bru.setVar('wal846_local_dispersion', dispersionEnvioMs);
+  assertions:
+    - expression: bru.getVar("wal846_local_aceptadas")
+      operator: eq
+      value: "1"
+    - expression: bru.getVar("wal846_local_liberado")
+      operator: eq
+      value: "true"
+    - expression: bru.getVar("wal846_local_dispersion")
+      operator: lt
+      value: "100"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  # LOCAL — concurrentes mismo cliente
+
+  5 extracciones en paralelo con el mismo `idCliente` contra `{{baseUrlLocal}}`.
+
+  **Esperado:** 1 aceptada, 4 rechazadas. Despues, un pedido mas que debe pasar
+  (confirma que el `await using` libero el lock).
+
+  ## Que valida y que no
+
+  Valida el lock **dentro de un proceso**. Con una sola instancia local, este caso da
+  1 aceptada tanto con el `ConcurrentDictionary` de WAL-845 como con RedLock, asi que
+  **no puede fallar aunque el lock distribuido este roto**. Es red de seguridad, no
+  validacion del cambio: para eso usar la carpeta HOMO.
+
+  Requiere la API local levantada con el perfil HTTP-only (ver docs de la carpeta).

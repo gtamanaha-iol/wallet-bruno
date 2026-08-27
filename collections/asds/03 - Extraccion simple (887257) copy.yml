@@ -1,0 +1,65 @@
+info:
+  name: 03 - Extraccion simple (887257) copy
+  type: http
+  seq: 4
+
+http:
+  method: POST
+  url: https://cashout-api.app.homo.invertironline.com/api/v1/ExtraccionAutomatica/Extraer
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "idCliente": 887257,
+        "tipoCuenta": 1,
+        "tipoExtraccion": 2,
+        "importe": 0.03,
+        "idCuentaBancariaDelClienteDestino": 0
+      }
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.body.data.result
+      operator: eq
+      value: "true"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  # Smoke test — una extraccion sola
+
+  Un unico pedido, sin concurrencia. Sirve para verificar que el endpoint responde y
+  que el cliente puede extraer, **antes** de correr los casos concurrentes: si este
+  falla, los otros no van a decir nada util sobre el lock.
+
+  **Esperado:** HTTP 200 con `result: true` y un `idCuentaMovim` distinto de 0.
+
+  A diferencia de los casos 01 y 02, este es un request normal de Bruno (sin scripts),
+  asi que la respuesta se ve en el panel de Response y no en la consola.
+
+  ## Cliente
+
+  | idCliente | CC (NumeCuen) | ID_CuenComi | SaldCuen (2026-08-04) |
+  |---|---|---|---|
+  | 887257 | 212714 | 266187 | 200.106.855.679 |
+
+  ## Que mirar si falla
+
+  | Respuesta | Significa |
+  |---|---|
+  | 200 + `result: true` | OK, se genero el movimiento |
+  | 202 + "excede el límite de su Saldo" | El cliente se quedo sin saldo |
+  | 202 + "Ya existe una extracción en curso" | Hay un lock vigente: o corriste esto recien, o quedo huerfano (espera hasta 120s) |
+  | 500 | Error del servicio, mirar los logs en Loki |
+
+  Genera **un movimiento real** en la base de homo.

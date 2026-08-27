@@ -1,0 +1,15 @@
+info:
+  name: /api/v1/InversionesCopia/usuario/cuentas/datos/3434723
+  type: http
+  seq: 2
+
+http:
+  method: GET
+  url: https://hub-proxy-supv.iol.com.ar/api/v1/InversionesCopia/usuario/cuentas/datos/3434723
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

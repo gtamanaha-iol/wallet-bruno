@@ -1,0 +1,34 @@
+info:
+  name: 1 - Crear multiples informes prueba
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1.0/Depositos/ConfirmarInformeDeposito"
+  body:
+    type: json
+    data: |-
+      {
+        "ID": 0,
+        "IdCliente": 1201096,
+        "Importe": 1552,
+        "IdMoneda": 1,
+        "IdBancoOrigen": 11,
+        "IdBancoDestino": 27,
+        "BancoDestinoSucursal": "",
+        "Fecha": "{{fechaInforme}}",
+        "NroComprobante": "DEMO{{$timestamp}}",
+        "IdTipoCuenta": 1,
+        "IdCuentaDestino": 1,
+        "Cbu": "0170099900000000000017",
+        "CuitCuil": "",
+        "IdTipoDeposito": 3
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

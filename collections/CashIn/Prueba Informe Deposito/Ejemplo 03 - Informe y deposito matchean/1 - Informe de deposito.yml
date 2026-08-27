@@ -1,0 +1,38 @@
+info:
+  name: 1 - Informe de deposito
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1.0/Depositos/ConfirmarInformeDeposito"
+  body:
+    type: json
+    data: |-
+      {
+        "ID": 0,
+        "IdCliente": 1083525,
+        "Importe": 5217,
+        "IdMoneda": 1,
+        "IdBancoOrigen": 11,
+        "IdBancoDestino": 27,
+        "BancoDestinoSucursal": "",
+        "Fecha": "{{fechaInforme}}",
+        "NroComprobante": "DEMO{{$timestamp}}",
+        "IdTipoCuenta": 1,
+        "IdCuentaDestino": 1,
+        "Cbu": "0170099900000000000017",
+        "CuitCuil": "",
+        "IdTipoDeposito": 3
+      }
+  auth: inherit
+
+# Paso 1/2. El cliente declara que va a transferir $5217 desde su CBU. Queda
+# en tcl_cuenta_deposito con Estadoxx = 1 (Pendiente), a la espera de que
+# llegue la transferencia real.
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

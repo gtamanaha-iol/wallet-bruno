@@ -1,0 +1,8 @@
+name: Produccion
+variables:
+  - name: baseUrl
+    value: https://hub-proxy-supv.invertironline.com
+    description: ""
+  - name: idCliente
+    value: "3882912"
+    description: ID de cliente IOL (int)

@@ -1,0 +1,44 @@
+info:
+  name: tenencia-clientes
+  type: folder
+  seq: 2
+
+request:
+  auth: none
+  scripts:
+    - type: before-request
+      code: |-
+        const identityUrl = bru.getEnvVar('identityUrl');
+        const clientId = bru.getEnvVar('clientId');
+        const clientSecret = bru.getEnvVar('clientSecret');
+        const scope = bru.getEnvVar('tenenciaScope');
+
+        if (!identityUrl || !clientId || !clientSecret) {
+          throw new Error('[Auth] Faltan variables: identityUrl, clientId o clientSecret');
+        }
+
+        const axios = require('axios');
+        let body = 'grant_type=client_credentials'
+                 + '&client_id=' + encodeURIComponent(clientId)
+                 + '&client_secret=' + encodeURIComponent(clientSecret);
+
+        if (scope) {
+          body += '&scope=' + encodeURIComponent(scope);
+        }
+
+        try {
+          const tokenRes = await axios.post(identityUrl + '/connect/token', body, {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+          });
+
+          if (tokenRes.data.access_token) {
+            bru.setEnvVar('tenenciaToken', tokenRes.data.access_token);
+            req.setHeader('Authorization', 'Bearer ' + tokenRes.data.access_token);
+          } else {
+            console.error('[Auth] No token in response:', JSON.stringify(tokenRes.data));
+          }
+        } catch (err) {
+          const detail = err.response ? JSON.stringify(err.response.data) : err.message;
+          console.error('[Auth] Token request failed:', detail);
+          throw new Error(`Token request failed: ${detail}`);
+        }

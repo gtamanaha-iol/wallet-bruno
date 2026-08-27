@@ -1,0 +1,7 @@
+info:
+  name: Ejemplo 01 - Deposito Pendiente => Informe copy
+  type: folder
+  seq: 5
+
+request:
+  auth: inherit

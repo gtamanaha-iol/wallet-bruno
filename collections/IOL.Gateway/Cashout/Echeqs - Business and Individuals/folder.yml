@@ -1,0 +1,7 @@
+info:
+  name: Echeqs - Business and Individuals
+  type: folder
+  seq: 1
+
+request:
+  auth: inherit

@@ -1,0 +1,161 @@
+info:
+  name: 01 - CLEAN todas las cuentas de los clientes de prueba
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: "{{baseUrl}}/healthcheck"
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        // El healthcheck de arriba es solo para que Bruno tenga algo que ejecutar:
+        // todo el trabajo sale de este script, que recorre N clientes y M cuentas.
+        const axios = require('axios');
+
+        const baseUrl = bru.getEnvVar('baseUrl');
+        const token   = bru.getVar('accessToken');
+        const headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token };
+
+        const ESTADO_BAJA = 4;
+
+        // Estados que bloquean un re-registro (ver BuscarCuentaDuplicada). Son los unicos
+        // que hay que limpiar: una cuenta ya en Baja o Rechazada no molesta.
+        const BLOQUEAN_ALTA = [0, 1, 6];
+
+        const ESTADOS = {
+          0: 'PendienteDeVerificacion', 1: 'Aceptada', 2: 'Rechazada',
+          3: 'Baja_Pendiente', 4: 'Baja', 5: 'Suspendida', 6: 'PendienteDeAprobacionManual'
+        };
+
+        const clientes = (bru.getEnvVar('clientesDePrueba') || '')
+          .split(',')
+          .map(s => s.trim())
+          .filter(Boolean);
+
+        if (!clientes.length) {
+          throw new Error('[Clean] el environment no tiene clientesDePrueba cargados');
+        }
+
+        console.log(`[Clean] ${clientes.length} cliente(s) contra ${baseUrl}`);
+        console.log('');
+
+        let totalBajas = 0;
+        let totalSalteadas = 0;
+        const errores = [];
+
+        for (const idCliente of clientes) {
+          let cuentas = [];
+
+          try {
+            const r = await axios.get(
+              `${baseUrl}/api/v1/CuentasExtraccion/ObtenerCuentasExtraccion/${idCliente}`,
+              { headers });
+            cuentas = (r.data && r.data.data) || [];
+          } catch (e) {
+            const detalle = e.response ? `${e.response.status} ${JSON.stringify(e.response.data)}` : e.message;
+            errores.push(`cliente ${idCliente}: no se pudieron listar las cuentas (${detalle})`);
+            continue;
+          }
+
+          const aLimpiar = cuentas.filter(c => BLOQUEAN_ALTA.includes(c.estadoCuentaBancaria));
+          totalSalteadas += cuentas.length - aLimpiar.length;
+
+          if (!aLimpiar.length) {
+            console.log(`cliente ${idCliente}: ${cuentas.length} cuenta(s), ninguna bloquea el alta`);
+            continue;
+          }
+
+          console.log(`cliente ${idCliente}: ${aLimpiar.length} de ${cuentas.length} cuenta(s) a dar de baja`);
+
+          for (const c of aLimpiar) {
+            const desde = ESTADOS[c.estadoCuentaBancaria] ?? c.estadoCuentaBancaria;
+
+            try {
+              const r = await axios.post(
+                `${baseUrl}/api/v1/BajaCuentaExtraccion/EjecutarBajaCuentaExtraccion`,
+                { idCliente: Number(idCliente), idCuenta: c.idCuenta, idAccion: ESTADO_BAJA },
+                { headers });
+
+              // El endpoint responde 200 con mensaje null cuando no hizo nada (por ejemplo
+              // si la cuenta no es del cliente), asi que el mensaje es la unica senal real.
+              const mensaje = (r.data && r.data.data && r.data.data.mensaje) || null;
+
+              if (mensaje) {
+                totalBajas++;
+                console.log(`  ${c.idCuenta} | ${c.numeroCbu} | ${desde} -> Baja`);
+              } else {
+                errores.push(`cliente ${idCliente} cuenta ${c.idCuenta}: respondio 200 sin mensaje (no se dio de baja)`);
+                console.log(`  ${c.idCuenta} | ${c.numeroCbu} | ${desde} -> SIN CAMBIO`);
+              }
+            } catch (e) {
+              const detalle = e.response ? `${e.response.status} ${JSON.stringify(e.response.data)}` : e.message;
+              errores.push(`cliente ${idCliente} cuenta ${c.idCuenta}: ${detalle}`);
+              console.log(`  ${c.idCuenta} | ${c.numeroCbu} | ${desde} -> ERROR`);
+            }
+          }
+        }
+
+        console.log('');
+        console.log(`[Clean] ${totalBajas} cuenta(s) dadas de baja, ${totalSalteadas} salteada(s) por no bloquear el alta`);
+
+        if (errores.length) {
+          console.log('');
+          console.log(`[Clean] ${errores.length} error(es):`);
+          errores.forEach(e => console.log(`  - ${e}`));
+        }
+
+        bru.setVar('cleanBajas', totalBajas);
+        bru.setVar('cleanErrores', errores.length);
+
+  assertions:
+    - expression: bru.getVar("cleanErrores")
+      operator: eq
+      value: "0"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  # CLEAN
+
+  Recorre los clientes de `clientesDePrueba` (variable del environment) y da de **baja
+  logica** todas sus cuentas que esten en un estado que bloquee un re-registro.
+
+  Despues de correrlo, las altas de `API / 02 - Alta cuenta extraccion` se pueden repetir
+  cuantas veces haga falta.
+
+  ## Que hace exactamente
+
+  Por cada cliente:
+
+  1. `GET /api/v1/CuentasExtraccion/ObtenerCuentasExtraccion/{idCliente}`
+  2. Filtra las cuentas en estado `0`, `1` o `6` — los tres que hacen que
+     `BuscarCuentaDuplicada` rechace un alta nueva del mismo CBU y moneda.
+  3. Por cada una: `POST /api/v1/BajaCuentaExtraccion/EjecutarBajaCuentaExtraccion` con
+     `idAccion: 4` (estado `Baja`).
+
+  Las cuentas ya en `Rechazada (2)`, `Baja (4)` o `Suspendida (5)` **se saltean**: no
+  bloquean nada y darlas de baja de nuevo solo agregaria ruido al historico de estados.
+
+  ## No borra filas
+
+  Es baja logica a proposito. No hay endpoint de borrado fisico en el servicio: el SP
+  `scl_eliminar_cuenta_retiro` solo se invoca internamente cuando un alta por alias resuelve
+  a un CBU que el cliente ya tenia. Para un borrado real haria falta SQL directo contra
+  `tcl_cuenta_retiro`, que no es algo que convenga meter en una coleccion.
+
+  ## Ojo con el historico
+
+  Cada corrida agrega una fila por cuenta en `Tcl_Cuenta_Retiro_Estado_Historico`. Si se
+  corre muchas veces, la trayectoria de esas cuentas queda llena de transiciones a `4`.
+  No afecta las pruebas, pero si el analisis del embudo sobre esos clientes.
+
+  ## La asercion
+
+  Falla si hubo cualquier error. Los detalles salen por consola, cuenta por cuenta.

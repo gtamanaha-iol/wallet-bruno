@@ -1,0 +1,69 @@
+info:
+  name: Ejemplo 02 - Deposito acreditado automaticamente
+  type: folder
+  seq: 2
+
+request:
+  scripts:
+    - type: before-request
+      code: |-
+        // ---------------------------------------------------------------------
+        // Que prueba esta carpeta: deposito SIN informe previo, camino feliz.
+        // ---------------------------------------------------------------------
+        // Llega la transferencia bancaria sola, sin que el cliente haya cargado
+        // ningun informe para ese importe. Al no haber nada que matchear, CashIn
+        // resuelve la cuenta comitente por DNI (Scl_CashIn_match_client_to_credit)
+        // y arma un "deposito espejo": una fila de tcl_cuenta_deposito creada
+        // automaticamente (Notaxxxx = 'Deposito espejo creado automaticamente',
+        // UsuarioId = 999), ya CONFIRMADA en el mismo paso.
+        //
+        // No hay estado "pendiente" intermedio que sobreviva: como el cliente
+        // tiene una unica CC candidata, no hace falta desempatar.
+        //   tcl_cuenta_deposito.Estadoxx                  nace directo en 2 (Confirmado)
+        //   tcl_movimiento_recaudadora.id_estado_interno  llega directo a 3 (Terminado)
+        //
+        // ---------------------------------------------------------------------
+        // Cliente de prueba: DNI 23153715 (homo), IdCliente 1083525
+        // ---------------------------------------------------------------------
+        // Tiene una unica CC activa candidata (341121): no hay cotitulares ni otras
+        // cuentas que compitan, asi que el SP de matcheo por DNI no tiene que
+        // desempatar. Verificado en WAL-806 (carpeta "5 - Regresion - camino
+        // feliz") como control de regresion limpio: con y sin fix, mismo resultado.
+        //
+        // Importe: HARDCODEADO en el request (700001.01). Si volves a correr esta
+        // carpeta con el mismo importe, vas a generar otro deposito espejo nuevo
+        // (no hay informe que consumir aca) — no es un problema, pero si queres
+        // limpiar antes de repetir la prueba:
+        //
+        //   SELECT ID_Deposito, Montoxxx, Estadoxx, Notaxxxx FROM tcl_Cuenta_Deposito
+        //   WHERE ID_Cliente = 1083525 AND Montoxxx = 700001.01;
+        // ---------------------------------------------------------------------
+
+        console.log('[EjemploSinInforme] importe 700001.01 (hardcodeado)');
+
+        // Token (client_credentials, scope MS-CASHIN).
+        // Mismo identity y client para local y homo: las cuentas de prueba son
+        // datos de la base de homo, asi que la API local tiene que levantarse con
+        // ASPNETCORE_ENVIRONMENT=HOMOLOGACION.
+        const identityUrl  = bru.getEnvVar('identityUrl');
+        const clientId     = bru.getEnvVar('clientId');
+        const clientSecret = bru.getEnvVar('clientSecret');
+
+        if (!identityUrl || !clientId || !clientSecret) {
+          throw new Error('[Auth] falta seleccionar un environment (local u homo)');
+        }
+
+        const axios = require('axios');
+        const tokenBody = 'grant_type=client_credentials'
+                        + '&client_id=' + encodeURIComponent(clientId)
+                        + '&client_secret=' + encodeURIComponent(clientSecret)
+                        + '&scope=MS-CASHIN';
+
+        const tokenRes = await axios.post(identityUrl + '/connect/token', tokenBody, {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        });
+
+        if (!tokenRes.data.access_token) {
+          throw new Error('[Auth] sin access_token: ' + JSON.stringify(tokenRes.data));
+        }
+        req.setHeader('Authorization', 'Bearer ' + tokenRes.data.access_token);

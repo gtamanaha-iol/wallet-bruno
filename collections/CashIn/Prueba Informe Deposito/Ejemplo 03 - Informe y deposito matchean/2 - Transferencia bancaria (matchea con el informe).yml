@@ -1,0 +1,49 @@
+info:
+  name: 2 - Transferencia bancaria (matchea con el informe)
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1.0/Fondos/DepositarMovimientoRecaudadora"
+  body:
+    type: json
+    data: |-
+      {
+        "Dni": "23153715",
+        "Comprobante": "DEMO-{{$timestamp}}",
+        "Importe": 5217,
+        "Referencia": "",
+        "IdRecaudadora": 1,
+        "Pais": 54,
+        "TipoCuenta": 1,
+        "Moneda": 1,
+        "TipoDepositoFondo": 3,
+        "TipoMovimiento": 1,
+        "EstadoOperacion": 1,
+        "FechaMovimiento": "{{$isoTimestamp}}",
+        "FechaTransferencia": "{{$isoTimestamp}}",
+        "ConceptoOperacion": "Credito por Transferencia",
+        "NombreOrdenante": "TEST DEMO",
+        "CuentaBancariaDestino": { "CBU": "0270100010036331160017" },
+        "CuentaBancariaOrigen": { "CBU": "0170099900000000000017" }
+      }
+  auth: inherit
+
+# Paso 2/2. Llega la transferencia real del banco. Mismo DNI, mismo importe
+# ($5217) y misma ventana de fecha que el informe del paso 1 -> matchea contra
+# esa fila (no crea un espejo) -> acredita en el mismo paso.
+#
+# Para confirmar en la base:
+#
+#   SELECT Estadoxx FROM tcl_Cuenta_Deposito
+#   WHERE ID_Cliente = 1083525 AND Montoxxx = 5217;                   -- = 2 (Confirmado)
+#
+#   SELECT id_estado_interno FROM tcl_movimiento_recaudadora
+#   WHERE Dni = '23153715' AND Importe = 5217;                        -- = 3 (Terminado)
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

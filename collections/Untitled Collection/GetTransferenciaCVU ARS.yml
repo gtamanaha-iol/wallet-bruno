@@ -1,0 +1,45 @@
+info:
+  name: GetTransferenciaCVU ARS
+  type: http
+  seq: 3
+
+http:
+  method: GET
+  url: "{{baseUrl}}/BindConsumerCopia/ConsultarTransferenciaCVUPorIdTransferencia?IdCuenta=20-1-627664-1-5&IdTransferencia=1-33707852459-000000074545320-1"
+  params:
+    - name: IdCuenta
+      value: 20-1-627664-1-5
+      type: query
+    - name: IdTransferencia
+      value: 1-33707852459-000000074545320-1
+      type: query
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  Consulta el estado de una transferencia CVU en BIND.
+
+  Controller: BindConsumerCopiaController (ProxyBindApi) — [AllowAnonymous], no requiere token.
+  Endpoint autenticado equivalente: BindConsumerController/ConsultarTransferenciaCVUPorIdTransferencia.
+
+  Parametros (query):
+  - IdCuenta        cuenta extractora BIND en formato banco (ej ARS prod 20-1-627664-1-5)
+  - IdTransferencia ID_TransferenciaBind real, formato {1|5}-{CUIT}-{ID_Cuenta_Movim:15}-1
+
+  Para obtener un IdTransferencia real:
+    SELECT TOP 20 ID_Cuenta_Movim, ID_TransferenciaBind, ID_Extraccion_Estado, FechaUltimaActualizacion
+    FROM dbo.Tcl_Movimiento_Extraccion_Bind WITH (NOLOCK)
+    WHERE ID_TransferenciaBind LIKE '[1-9]-%-%-%'
+    ORDER BY FechaUltimaActualizacion DESC;
+
+  Notas:
+  - Solo sirve para BIND. El id lo emite el banco, asi que solo existe si la transferencia se creo.
+    Para un rechazo previo a la creacion (ej TX042) no hay id que consultar.
+  - Supervielle NO tiene endpoint anonimo de consulta de transferencia; su clave ademas es
+    md5(ID_Cuenta_Movim), no un id emitido por el banco.
+  - El default apunta a Homologacion. Cambiar de environment para pegarle a produccion.

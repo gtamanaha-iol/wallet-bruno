@@ -1,0 +1,56 @@
+info:
+  name: "4 - Deposito de B"
+  type: http
+  seq: 4
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1.0/Fondos/DepositarMovimientoRecaudadora"
+  auth: inherit
+  body:
+    type: json
+    data: |-
+      {
+        "Dni": "21391818", // CC: 414843
+        "Comprobante": "WAL806-R{{runId}}-C8B-{{$timestamp}}",
+        "Importe": {{importeRankingCompleto}},
+        "Referencia": "",
+        "IdRecaudadora": 1,
+        "Pais": 54,
+        "TipoCuenta": 1,
+        "Moneda": 1,
+        "TipoDepositoFondo": 3,
+        "TipoMovimiento": 1,
+        "EstadoOperacion": 1,
+        "FechaMovimiento": "{{$isoTimestamp}}",
+        "FechaTransferencia": "{{$isoTimestamp}}",
+        "ConceptoOperacion": "Credito por Transferencia",
+        "NombreOrdenante": "TEST WAL806",
+        "CuentaBancariaDestino": { "CBU": "0270100010036331160017" },
+        "CuentaBancariaOrigen": { "CBU": "0170099900000000000017" }
+      }
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.body.responseType
+      operator: eq
+      value: "success"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  Paso 4/4. B no es cotitular de ninguna cuenta de A (asimetrico), asi que el deposito de B
+  SOLO puede ver su propio informe - si todavia esta pendiente.
+  CON FIX: el paso 3 consumio el informe de A, asi que el de B sigue pendiente -> lo toma ->
+  CC 414843, nota vacia. Los dos importes terminan bien: uno en cada cuenta.
+  SIN FIX, si el paso 3 tomo por error el informe de B: aca el metodo 1 no encuentra nada (el
+  informe de B ya esta consumido) y cae al metodo 2, que igual acredita en la CC 414843 propia
+  de B. Resultado: LOS DOS importes en la 414843, la 341121 en cero, y el informe de A quedo
+  huerfano para siempre - el mismo patron del escenario 1, llegado por el otro orden.

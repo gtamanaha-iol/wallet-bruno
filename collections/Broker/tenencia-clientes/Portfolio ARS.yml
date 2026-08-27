@@ -1,0 +1,14 @@
+info:
+  name: Portfolio ARS
+  type: http
+  seq: 4
+
+http:
+  method: GET
+  url: "{{tenenciaBaseUrl}}/portfolio/887257/ARG"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

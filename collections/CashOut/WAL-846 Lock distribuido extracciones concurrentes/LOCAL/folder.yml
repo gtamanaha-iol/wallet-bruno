@@ -1,0 +1,38 @@
+info:
+  name: LOCAL
+  type: folder
+  seq: 2
+
+docs: |
+  # LOCAL — 1 instancia
+
+  Estos casos validan el lock **dentro de un proceso**. Con una sola instancia local,
+  el `ConcurrentDictionary` de WAL-845 y RedLock dan el **mismo resultado**, asi que
+  estos casos **no distinguen** una implementacion de la otra: sirven como red de
+  seguridad (que no rompimos el comportamiento basico), no como validacion de WAL-846.
+
+  Para validar el lock distribuido, usar la carpeta **HOMO**, que corre 2 instancias.
+
+  ## Como levantar la API local
+
+  ```
+  dotnet run --project src/IOL.CashOut.API --launch-profile "HOMOLOGACION (HTTP only - WAL-846 Bruno)"
+  ```
+
+  El perfil HTTP-only no es opcional. `Startup.cs:127` tiene `UseHttpsRedirection()`:
+  si la API expone tambien el puerto HTTPS, todo pedido HTTP rebota a
+  `https://localhost:5003`, donde el certificado de desarrollo es self-signed. Y el
+  sandbox de Bruno **no permite saltearlo** — bloquea tanto `require('https')`
+  (`Cannot find module https`) como `process` (`ReferenceError: 'process' is not
+  defined`), y la preferencia global "SSL/TLS Certificate Verification" solo cubre el
+  motor de requests de Bruno, no el axios que corre dentro de los scripts.
+
+  Sin endpoint HTTPS, `UseHttpsRedirection` no resuelve el puerto destino y deja pasar
+  el HTTP tal cual. El swagger queda en `http://localhost:5002/swagger/index.html`.
+
+  ## Ojo con la base
+
+  Levantada con `ASPNETCORE_ENVIRONMENT=HOMOLOGACION`, la API local escribe en la
+  **misma base y el mismo Redis que homologacion**. Los movimientos que generes desde
+  local son movimientos reales de homo, y los locks se comparten con las instancias
+  desplegadas.

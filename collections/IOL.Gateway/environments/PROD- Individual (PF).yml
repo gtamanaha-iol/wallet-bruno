@@ -1,0 +1,23 @@
+name: PROD- Individual (PF)
+variables:
+  - name: baseUrl
+    value: https://gateway-api.invertironline.com
+    description: ""
+  - name: identityServerUrl
+    value: https://api-gat-app.invertironline.com
+    description: ""
+  - name: username
+    value: guillermo.tamanaha@gmail.com
+    description: ""
+  - secret: true
+    name: password
+    description: ""
+  - secret: true
+    name: token
+    description: ""
+  - name: bankAccountDestinationId
+    value: "-1"
+    description: ""
+  - name: password
+    value: Gisela.1983
+    description: ""

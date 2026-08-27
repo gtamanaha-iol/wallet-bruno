@@ -1,0 +1,51 @@
+info:
+  name: "4 - Deposito de B (el esposo) - control"
+  type: http
+  seq: 4
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1.0/Fondos/DepositarMovimientoRecaudadora"
+  auth: inherit
+  body:
+    type: json
+    data: |-
+      {
+        "Dni": "21391818", // CC: 414843
+        "Comprobante": "WAL806-R{{runId}}-C1B-{{$timestamp}}",
+        "Importe": {{importeCaso}},
+        "Referencia": "",
+        "IdRecaudadora": 1,
+        "Pais": 54,
+        "TipoCuenta": 1,
+        "Moneda": 1,
+        "TipoDepositoFondo": 3,
+        "TipoMovimiento": 1,
+        "EstadoOperacion": 1,
+        "FechaMovimiento": "{{$isoTimestamp}}",
+        "FechaTransferencia": "{{$isoTimestamp}}",
+        "ConceptoOperacion": "Credito por Transferencia",
+        "NombreOrdenante": "TEST WAL806",
+        "CuentaBancariaDestino": { "CBU": "0270100010036331160017" },
+        "CuentaBancariaOrigen": { "CBU": "0170099900000000000017" }
+      }
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.body.responseType
+      operator: eq
+      value: "success"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  Paso 4/4. CONTROL. Transferencia propia de B. Termina en CC 414843 con y sin fix,
+  pero por caminos distintos: con fix consume su informe, sin fix va por espejo.
+  El control de regresion limpio es la carpeta 5, no este.

@@ -10,6 +10,18 @@ collections:
     path: "collections/Balance.Alyc.Gateway"
   - name: "IOL.Gateway"
     path: "collections/IOL.Gateway"
+  - name: "Untitled Collection"
+    path: "collections/Untitled Collection"
+  - name: "Identity Server STS"
+    path: "collections/Identity Server STS"
+  - name: "CashIn"
+    path: "collections/CashIn"
+  - name: "CashOut"
+    path: "collections/CashOut"
+  - name: "HUB.Proxy.Supv.API"
+    path: "collections/HUB.Proxy.Supv.API"
+  - name: "Broker"
+    path: "collections/Broker"
 
 specs:
 

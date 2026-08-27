@@ -1,0 +1,48 @@
+info:
+  name: Clean
+  type: folder
+  seq: 3
+
+request:
+  auth: none
+  scripts:
+    - type: before-request
+      code: |-
+        // Token (client_credentials, scope MS-CEX).
+        const identityUrl  = bru.getEnvVar('identityUrl');
+        const clientId     = bru.getEnvVar('clientId');
+        const clientSecret = bru.getEnvVar('clientSecret');
+        const scope        = bru.getEnvVar('scope');
+
+        if (!identityUrl || !clientId || !clientSecret) {
+          throw new Error('[Auth] falta seleccionar un environment (Local u Homologacion)');
+        }
+
+        const axios = require('axios');
+        const tokenBody = 'grant_type=client_credentials'
+                        + '&client_id=' + encodeURIComponent(clientId)
+                        + '&client_secret=' + encodeURIComponent(clientSecret)
+                        + '&scope=' + encodeURIComponent(scope);
+
+        const tokenRes = await axios.post(identityUrl + '/connect/token', tokenBody, {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        });
+
+        if (!tokenRes.data.access_token) {
+          throw new Error('[Auth] sin access_token: ' + JSON.stringify(tokenRes.data));
+        }
+
+        bru.setVar('accessToken', tokenRes.data.access_token);
+        req.setHeader('Authorization', 'Bearer ' + tokenRes.data.access_token);
+
+docs: |
+  # Clean
+
+  Deja los clientes de prueba en un estado desde el que se pueden volver a correr las altas.
+
+  No borra filas: hace **baja logica** a estado `4` (`Baja`) de cada cuenta. Alcanza, porque
+  `BuscarCuentaDuplicada` solo bloquea un re-registro cuando la cuenta esta en `Aceptada (1)`,
+  `PendienteDeVerificacion (0)` o `PendienteDeAprobacionManual (6)`.
+
+  No existe endpoint de borrado fisico: `scl_eliminar_cuenta_retiro` solo se usa internamente
+  cuando un alta por alias resuelve a un CBU que el cliente ya tenia.

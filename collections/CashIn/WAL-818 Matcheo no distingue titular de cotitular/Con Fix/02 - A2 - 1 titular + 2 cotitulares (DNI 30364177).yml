@@ -1,0 +1,47 @@
+info:
+  name: "02 - A2 - 1 titular + 2 cotitulares (DNI 30364177)"
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1.0/Fondos/DepositarMovimientoRecaudadora"
+  auth: inherit
+  body:
+    type: json
+    data: |-
+      {
+        "Dni": "30364177",
+        "Comprobante": "WAL818-CONFIX-A2-{{$timestamp}}",
+        "Importe": 1002.02,
+        "Referencia": "VARVarios",
+        "IdRecaudadora": 1,
+        "Pais": 54,
+        "TipoCuenta": 1,
+        "Moneda": 1,
+        "TipoDepositoFondo": 3,
+        "TipoMovimiento": 1,
+        "EstadoOperacion": 1,
+        "FechaMovimiento": "{{$isoTimestamp}}",
+        "FechaTransferencia": "{{$isoTimestamp}}",
+        "ConceptoOperacion": "Credito por Transferencia",
+        "NombreOrdenante": "TEST WAL818",
+        "CuentaBancariaDestino": { "CBU": "0270100010036331160017" },
+        "CuentaBancariaOrigen": { "CBU": "0170099900000000000017" }
+      }
+
+# forma (a) + CC repetida, CC dormidas. Candidatas: CC 301184 titular (2021-07), CC 5484 cotitular (2008), CC 414981 cotitular Y cta-retiro (2022-09). SIN FIX: CuentaMasNueva -> 414981. CON FIX: TitularCC -> 301184.
+#
+# Se acredita en los dos escenarios; lo que cambia es EN QUE CC.
+# Verificar con verify-homo.sql.
+assert:
+  - expr: res.status
+    assert: eq 200
+  - expr: res.body.responseType
+    assert: eq success
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

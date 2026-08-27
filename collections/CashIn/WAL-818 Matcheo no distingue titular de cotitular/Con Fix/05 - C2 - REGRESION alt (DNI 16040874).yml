@@ -1,0 +1,47 @@
+info:
+  name: "05 - C2 - REGRESION alt (DNI 16040874)"
+  type: http
+  seq: 5
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1.0/Fondos/DepositarMovimientoRecaudadora"
+  auth: inherit
+  body:
+    type: json
+    data: |-
+      {
+        "Dni": "16040874",
+        "Comprobante": "WAL818-CONFIX-C2-{{$timestamp}}",
+        "Importe": 1005.05,
+        "Referencia": "VARVarios",
+        "IdRecaudadora": 1,
+        "Pais": 54,
+        "TipoCuenta": 1,
+        "Moneda": 1,
+        "TipoDepositoFondo": 3,
+        "TipoMovimiento": 1,
+        "EstadoOperacion": 1,
+        "FechaMovimiento": "{{$isoTimestamp}}",
+        "FechaTransferencia": "{{$isoTimestamp}}",
+        "ConceptoOperacion": "Credito por Transferencia",
+        "NombreOrdenante": "TEST WAL818",
+        "CuentaBancariaDestino": { "CBU": "0270100010036331160017" },
+        "CuentaBancariaOrigen": { "CBU": "0170099900000000000017" }
+      }
+
+# forma (c). Candidatas: CC 20331 cotitular (2015-09) y CC 40115 cta-retiro (2018-09). Mismo contraste que el caso 04: SP-only -> 40115, con fallback -> 20331.
+#
+# Se acredita en los dos escenarios; lo que cambia es EN QUE CC.
+# Verificar con verify-homo.sql.
+assert:
+  - expr: res.status
+    assert: eq 200
+  - expr: res.body.responseType
+    assert: eq success
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

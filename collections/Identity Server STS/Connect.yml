@@ -1,0 +1,30 @@
+info:
+  name: Connect
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: https://identity-server-sts.homo.invertironline.com/connect/token
+  body:
+    type: multipart-form
+    data:
+      - name: client_id
+        type: text
+        value: C-MAIL-EXTRACCION
+      - name: client_secret
+        type: text
+        value: 1938a6cf-d70b-9a62-b61c-670ef68fb93a
+      - name: scope
+        type: text
+        value: MS-TICKET
+      - name: grant_type
+        type: text
+        value: client_credentials
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

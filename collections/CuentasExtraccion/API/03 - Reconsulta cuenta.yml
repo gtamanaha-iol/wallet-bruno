@@ -1,0 +1,55 @@
+info:
+  name: 03 - Reconsulta cuenta
+  type: http
+  seq: 4
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/CuentasExtraccion/ReconsultaCuentaExtraccion/{{idCuenta}}"
+  headers:
+    - name: Content-Type
+      value: application/json
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+  scripts:
+    - type: after-response
+      code: |-
+        const ESTADOS = {
+          0: 'PendienteDeVerificacion', 1: 'Aceptada', 2: 'Rechazada',
+          3: 'Baja_Pendiente', 4: 'Baja', 5: 'Suspendida', 6: 'PendienteDeAprobacionManual'
+        };
+
+        const d = (res.body && res.body.data) || {};
+        console.log(`cuenta ${d.idCuenta} | cliente ${d.idCliente} | banco ${d.idBanco}`);
+        console.log(`estado -> ${ESTADOS[d.estadoCuentaBancaria] ?? d.estadoCuentaBancaria} (${d.estadoCuentaBancaria})`);
+        console.log(`detalle -> ${d.detalleResultadoValidacion || '(vacio)'}`);
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  # ReconsultaCuentaExtraccion
+
+  `POST api/v1/CuentasExtraccion/ReconsultaCuentaExtraccion/{idCuenta}`
+
+  **Es la forma de probar el gate de WAL-640 sin dar de alta nada.** Pasa por el mismo
+  `ConfirmarDatosCuentaBancaria` -> `GuardarValidacion` que el alta, y como el trigger es
+  `EndpointApi` **no** aplica el guard de estado (que esta dentro del
+  `if (tipoReconsulta == Automatica)`). Se puede correr sobre cuentas en cualquier estado,
+  cuantas veces haga falta, sin crear cuentas ni quemar codigos 2FA.
+
+  ## Ojo: el gate solo se ejercita si BIND/SUPV devuelve datos
+
+  El gate vive en la rama "identidad OK" de `GuardarValidacion`. Si BIND no resuelve el CBU,
+  la reconsulta con `EndpointApi` pasa `rechazarSiFalla: false`, cae en `ErrorValidacionBind`
+  y **no llega al gate**: la cuenta queda como estaba.
+
+  Por eso los casos de prueba se eligieron sobre cuentas cuyo `detalle_servicio_interbanking`
+  dice *"Cuenta habilitada por Bind."* o *"...por Supervielle."*.

@@ -1,0 +1,108 @@
+info:
+  name: WAL-846 Lock distribuido extracciones concurrentes
+  type: folder
+  seq: 3
+
+request:
+  scripts:
+    - type: before-request
+      code: |-
+        // Token (client_credentials, scope MS-CASHOUT).
+        //
+        // Best-effort a proposito: `ExtraccionAutomaticaController` NO tiene [Authorize]
+        // y no hay FallbackPolicy global, asi que el endpoint es anonimo y las pruebas
+        // corren igual sin token. Si se completa `clientSecret` en el environment, se
+        // pide y se manda; si no, se sigue sin Authorization en vez de cortar la corrida.
+        // Asi queda listo para el dia que el controller pida auth, sin bloquear hoy.
+        const identityUrl  = bru.getEnvVar('identityUrl');
+        const clientId     = bru.getEnvVar('clientId');
+        const clientSecret = bru.getEnvVar('clientSecret');
+        const scope        = bru.getEnvVar('scope');
+
+        bru.setVar('accessToken', '');
+
+        if (!clientSecret) {
+          console.log('[Auth] sin clientSecret en el environment: se corre sin token (el endpoint es anonimo).');
+        } else {
+          const axios = require('axios');
+          const tokenBody = 'grant_type=client_credentials'
+                          + '&client_id=' + encodeURIComponent(clientId)
+                          + '&client_secret=' + encodeURIComponent(clientSecret)
+                          + '&scope=' + encodeURIComponent(scope);
+
+          try {
+            const tokenRes = await axios.post(identityUrl + '/connect/token', tokenBody, {
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+            });
+
+            if (tokenRes.data.access_token) {
+              // Se guarda ademas en variable para que los scripts que disparan pedidos
+              // en paralelo con axios puedan mandar el mismo header.
+              bru.setVar('accessToken', tokenRes.data.access_token);
+              req.setHeader('Authorization', 'Bearer ' + tokenRes.data.access_token);
+            } else {
+              console.log('[Auth] respuesta sin access_token, se sigue sin token: ' + JSON.stringify(tokenRes.data));
+            }
+          } catch (e) {
+            const detalle = e.response ? JSON.stringify(e.response.data) : e.message;
+            console.log('[Auth] fallo el pedido de token, se sigue sin token: ' + detalle);
+          }
+        }
+
+docs:
+  content: |
+    # WAL-846 — Lock distribuido con RedLock
+
+    Valida que el lock por `IdCliente` funcione **entre procesos** (RedLock sobre Redis),
+    reemplazando al `ConcurrentDictionary` in-process de WAL-845.
+
+    ## Dos carpetas
+
+    | Carpeta | Instancias | Que valida |
+    |---|---|---|
+    | **HOMO** | 2 (balanceadas) | El lock **distribuido** — es la que valida WAL-846 |
+    | **LOCAL** | 1 | El lock dentro de un proceso — red de seguridad |
+
+    Cada carpeta tiene los mismos dos casos:
+
+    - **01 - Concurrentes mismo cliente** → 5 en paralelo, mismo `idCliente`, espera **1 aceptada**
+    - **02 - Concurrentes clientes distintos** → 5 en paralelo, clientes distintos, espera **5 aceptadas**
+
+    El 01 verifica que el lock **frena** lo que debe; el 02 que **no frena de mas**.
+
+    ## Por que solo HOMO valida el cambio
+
+    Con **una** instancia, el `ConcurrentDictionary` de WAL-845 y RedLock dan el mismo
+    resultado (1 aceptada), asi que los casos de LOCAL no pueden fallar aunque el lock
+    distribuido este roto.
+
+    Homo corre **2 instancias** detras del balanceador, asi que ahi si se separan:
+
+    | Implementacion | HOMO / 01 |
+    |---|---|
+    | WAL-845 (in-process) | **2+ aceptadas** — una por instancia |
+    | WAL-846 (RedLock) | **1 aceptada** |
+
+    Medido con la implementacion in-process el 2026-08-04 15:03: **3 de 5 aceptadas**
+    contra homo. Esa es la falla que este ticket corrige.
+
+    ## Environments
+
+    - `baseUrlHomo` → servicio desplegado
+    - `baseUrlLocal` → `http://localhost:5002`
+
+    Los casos apuntan a una instancia fija cada uno, asi que **no importa que environment
+    tengas seleccionado** para las URLs. El environment solo define el identity para el token.
+
+    `clientSecret` es opcional: el endpoint es anonimo (`ExtraccionAutomaticaController`
+    no tiene `[Authorize]`), y si esta vacio el script de token avisa por consola y sigue
+    sin `Authorization`.
+
+    ## Ojo
+
+    - Los movimientos que generan estos casos son **movimientos reales** de la base de homo
+      (la API local tambien apunta ahi).
+    - Local y homo **comparten el Redis**, asi que no corras casos de las dos carpetas en
+      paralelo: los locks se pisan.
+    - Para levantar la API local hay un requisito de HTTP-only: ver los docs de la carpeta LOCAL.
+  type: text/markdown

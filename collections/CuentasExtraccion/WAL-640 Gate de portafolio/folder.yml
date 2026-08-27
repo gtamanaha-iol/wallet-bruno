@@ -1,0 +1,83 @@
+info:
+  name: WAL-640 Gate de portafolio
+  type: folder
+  seq: 2
+
+request:
+  auth: none
+  scripts:
+    - type: before-request
+      code: |-
+        // Dos tokens distintos, a proposito:
+        //
+        // - accessToken (scope MS-CEX): para MO.API.CuentasExtraccion.
+        // - tokenValorizado (scopes MS-TEN + MS-OS): para consultar a mano los mismos
+        //   upstreams que usa el gate. Necesita los DOS: tenencia reenvia el Authorization
+        //   del caller a operatoria-simple para pedir el MEP con el que convierte los
+        //   activos en dolares, asi que con MS-TEN solo el portafolio devuelve 500.
+        const axios = require('axios');
+
+        const identityUrl  = bru.getEnvVar('identityUrl');
+        const clientId     = bru.getEnvVar('clientId');
+        const clientSecret = bru.getEnvVar('clientSecret');
+
+        if (!identityUrl || !clientId || !clientSecret) {
+          throw new Error('[Auth] falta seleccionar un environment (Local u Homologacion)');
+        }
+
+        const pedirToken = async (scope) => {
+          const body = 'grant_type=client_credentials'
+                     + '&client_id=' + encodeURIComponent(clientId)
+                     + '&client_secret=' + encodeURIComponent(clientSecret)
+                     + '&scope=' + encodeURIComponent(scope);
+
+          const r = await axios.post(identityUrl + '/connect/token', body, {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+          });
+
+          if (!r.data.access_token) {
+            throw new Error(`[Auth] sin access_token para scope "${scope}": ` + JSON.stringify(r.data));
+          }
+
+          return r.data.access_token;
+        };
+
+        const token = await pedirToken(bru.getEnvVar('scope'));
+        bru.setVar('accessToken', token);
+        req.setHeader('Authorization', 'Bearer ' + token);
+
+        // Best effort: si el client no tiene los scopes del valorizado, los requests que
+        // consultan tenencia lo van a reportar, pero los de la API igual corren.
+        try {
+          bru.setVar('tokenValorizado', await pedirToken(bru.getEnvVar('scopeValorizado')));
+        } catch (e) {
+          bru.setVar('tokenValorizado', '');
+          console.log('[Auth] sin token de valorizado: ' + e.message);
+        }
+
+docs: |
+  # WAL-640 — Gate de portafolio
+
+  Las pruebas del gate de aprobacion automatica por valorizado del cliente.
+
+  Los 13 casos y el detalle de que cubre cada uno estan en
+  `MO.API.CuentasExtraccion/local_docs/features/wal-640-aprobacion-automatica/09-casos-de-prueba-homo.md`.
+
+  ## Antes de correr
+
+  1. El flag `AutomaticApprovalByPortfolio.Enabled` tiene que estar en `true` en el
+     `appsettings` del ambiente contra el que se corre.
+  2. El client `C-CEX` del servicio necesita los scopes `MS-TEN` y `MS-OS` en el identity,
+     y el `ApiIdentityServerConfigProxy.Scopes` del `appsettings` tiene que incluirlos.
+     **Cargar los scopes en el identity primero y recien despues deployar**: los cuatro
+     clients salientes comparten un unico token, asi que si el identity rechaza los scopes
+     nuevos se caen tambien las llamadas a BIND/SUPV.
+  3. Correr el **CLEAN** si se van a repetir altas.
+
+  ## Orden sugerido
+
+  | Request | Para que |
+  |---|---|
+  | `01 - Correr los 13 casos` | La corrida completa, con tabla de resultados |
+  | `02 - Valorizado de un cliente` | Ver el calculo leg por leg de un cliente puntual |
+  | `03 - Estado de las cuentas de prueba` | Foto del estado de las 13 cuentas, antes o despues |

@@ -1,0 +1,106 @@
+info:
+  name: 03 - Estado de las cuentas de prueba
+  type: http
+  seq: 3
+
+http:
+  method: GET
+  url: "{{baseUrl}}/healthcheck"
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        // Foto de las 13 cuentas de la matriz, sin tocar nada. Sirve para ver el punto de
+        // partida antes de correr los casos, y para comparar despues.
+        const axios = require('axios');
+
+        const baseUrl = bru.getEnvVar('baseUrl');
+        const token   = bru.getVar('accessToken');
+        const headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token };
+
+        const ESTADOS = {
+          0: 'Pendiente', 1: 'Aceptada', 2: 'Rechazada',
+          3: 'BajaPend', 4: 'Baja', 5: 'Suspendida', 6: 'AprobManual'
+        };
+
+        const CUENTAS = [
+          { n: 1,  idCuenta: 614068,   idCliente: 505258,  entidad: 'Galicia' },
+          { n: 2,  idCuenta: 613911,   idCliente: 1195589, entidad: 'ICBC' },
+          { n: 3,  idCuenta: 613964,   idCliente: 1035817, entidad: 'ICBC' },
+          { n: 4,  idCuenta: 612400,   idCliente: 1189924, entidad: 'Wilobank' },
+          { n: 5,  idCuenta: 611661,   idCliente: 104310,  entidad: 'Wilobank' },
+          { n: 6,  idCuenta: 613989,   idCliente: 617764,  entidad: 'ICBC' },
+          { n: 7,  idCuenta: 61464121, idCliente: 1201112, entidad: 'ICBC' },
+          { n: 8,  idCuenta: 614599,   idCliente: 1197453, entidad: 'ICBC' },
+          { n: 9,  idCuenta: 613910,   idCliente: 1195589, entidad: 'ICBC' },
+          { n: 10, idCuenta: 613209,   idCliente: 1193358, entidad: 'PPay' },
+          { n: 11, idCuenta: 396427,   idCliente: 979714,  entidad: 'Uala' },
+          { n: 12, idCuenta: 384774,   idCliente: 949925,  entidad: 'MercadoLibre' },
+          { n: 13, idCuenta: 61464104, idCliente: 1201113, entidad: 'Ripio' }
+        ];
+
+        // Una sola llamada por cliente, aunque tenga varias cuentas en la matriz.
+        const porCliente = new Map();
+        for (const c of CUENTAS) {
+          if (!porCliente.has(c.idCliente)) porCliente.set(c.idCliente, null);
+        }
+
+        for (const idCliente of porCliente.keys()) {
+          try {
+            const r = await axios.get(
+              `${baseUrl}/api/v1/CuentasExtraccion/ObtenerCuentasExtraccion/${idCliente}`,
+              { headers });
+            porCliente.set(idCliente, (r.data && r.data.data) || []);
+          } catch (e) {
+            porCliente.set(idCliente, 'ERROR');
+          }
+        }
+
+        console.log(`Estado de las 13 cuentas de prueba | ${baseUrl}`);
+        console.log('');
+        console.log('  #  | entidad        | cuenta     | cliente   | estado');
+        console.log('-----+----------------+------------+-----------+---------------');
+
+        for (const c of CUENTAS) {
+          const cuentas = porCliente.get(c.idCliente);
+          let estado;
+
+          if (cuentas === 'ERROR') {
+            estado = 'ERROR al listar';
+          } else {
+            const found = cuentas.find(x => x.idCuenta === c.idCuenta);
+            estado = found
+              ? `${ESTADOS[found.estadoCuentaBancaria] ?? found.estadoCuentaBancaria}(${found.estadoCuentaBancaria})`
+              : 'NO ESTA';
+          }
+
+          console.log(
+            ` ${String(c.n).padStart(2)}  | ${c.entidad.padEnd(14)} | ` +
+            `${String(c.idCuenta).padEnd(10)} | ${String(c.idCliente).padEnd(9)} | ${estado}`);
+        }
+
+        console.log('');
+        console.log('"NO ESTA" = el listado del cliente no la devuelve. Puede ser que el CLEAN la haya');
+        console.log('dado de baja, o que ObtenerCuentasExtraccion la filtre: el repositorio descarta las');
+        console.log('filas cuyo TipoCuentaID no es un valor definido de TiposCuentaBancaria.');
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  # Estado de las cuentas de prueba
+
+  Foto de las 13 cuentas de la matriz de WAL-640, sin modificar nada. Conviene correrlo
+  **antes** de `01 - Correr los 13 casos` para tener el punto de partida, y despues para
+  comparar.
+
+  Agrupa por cliente, asi que hace una sola llamada por cliente aunque la matriz tenga dos
+  cuentas del mismo (los casos 2 y 9 comparten el cliente `1195589`).
+
+  Ojo con `NO ESTA`: ademas de una baja, puede ser el filtro de
+  `CuentaExtraccionRepository.ObtenerCuentasExtraccion`, que descarta en silencio las filas
+  cuyo `TipoCuentaID` no es un valor definido del enum `TiposCuentaBancaria`.

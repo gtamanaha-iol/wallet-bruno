@@ -1,0 +1,131 @@
+info:
+  name: 02 - Valorizado de un cliente
+  type: http
+  seq: 2
+
+http:
+  method: GET
+  url: "{{quotesUrl}}/api/Quotes/mep/referenceValue"
+  headers:
+    - name: Authorization
+      value: "Bearer {{tokenValorizado}}"
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        // Replica el calculo que hace ClientPortfolioService, leg por leg, para poder ver
+        // por que un caso de umbral dio lo que dio. El MEP ya viene en la respuesta del
+        // request de arriba (el endpoint devuelve un numero pelado, sin objeto).
+        const axios = require('axios');
+
+        const tenenciaUrl = bru.getEnvVar('tenenciaUrl');
+        const idCliente   = bru.getEnvVar('idCliente');
+        const token       = bru.getVar('tokenValorizado');
+
+        if (!token) {
+          throw new Error('[Valorizado] sin token: al client le faltan los scopes MS-TEN y MS-OS');
+        }
+
+        const headers = { 'Authorization': 'Bearer ' + token };
+        const UMBRAL = 1000000;
+
+        const mep = Number(res.body);
+        if (!(mep > 0)) {
+          throw new Error('[Valorizado] MEP invalido: ' + JSON.stringify(res.body));
+        }
+
+        // Cada leg devuelve el valor o null, con el codigo, para poder distinguir
+        // "no tiene" de "fallo".
+        const leg = async (url, extraer) => {
+          try {
+            const r = await axios.get(url, { headers });
+            const v = extraer(r.data);
+            return { valor: (v === null || v === undefined) ? null : Number(v), code: r.status };
+          } catch (e) {
+            return { valor: null, code: e.response ? e.response.status : 0 };
+          }
+        };
+
+        const ars = await leg(`${tenenciaUrl}/Saldo/${idCliente}/Arg_ARS/Disponible/t0`, d => d?.disponibles?.t0);
+        const usd = await leg(`${tenenciaUrl}/Saldo/${idCliente}/Arg_USD/Disponible/t0`, d => d?.disponibles?.t0);
+        const pf  = await leg(`${tenenciaUrl}/Portfolio/${idCliente}/ARG?specie=0`,      d => d?.valuation);
+
+        const fmt = n => n === null ? '-' : n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        console.log(`Cliente ${idCliente} | MEP ${fmt(mep)}`);
+        console.log('');
+        console.log(`  saldo ARS        ${String(ars.code).padStart(3)}  ${fmt(ars.valor).padStart(22)}   requerido`);
+        console.log(`  saldo USD        ${String(usd.code).padStart(3)}  ${fmt(usd.valor).padStart(22)}   si falla -> 0`);
+        console.log(`  portafolio ARG   ${String(pf.code).padStart(3)}  ${fmt(pf.valor).padStart(22)}   requerido, nunca 0`);
+        console.log('');
+
+        // Misma politica que ComposeTotalAsync: ARS y portafolio son requeridos, el USD
+        // que falla cuenta 0, y el MEP solo hace falta si hay saldo en dolares.
+        if (ars.valor === null || pf.valor === null) {
+          const falta = ars.valor === null ? 'saldo ARS' : 'portafolio ARG';
+          console.log(`  TOTAL: DESCONOCIDO (falla el leg requerido: ${falta})`);
+          console.log('  -> la cuenta queda en PendienteDeAprobacionManual (fail-safe)');
+          bru.setVar('valorizadoTotal', '');
+        } else {
+          const usdEfectivo = usd.valor === null ? 0 : usd.valor;
+          const total = ars.valor + usdEfectivo * mep + pf.valor;
+
+          console.log(`  TOTAL ARS        ${fmt(total).padStart(27)}`);
+          console.log(`  umbral           ${fmt(UMBRAL).padStart(27)}`);
+          console.log('');
+          console.log(total < UMBRAL
+            ? '  -> BAJO el umbral: si la entidad esta en la lista de aprobacion manual, se APRUEBA'
+            : '  -> SOBRE el umbral: queda en PendienteDeAprobacionManual');
+
+          if (usd.valor === null) {
+            console.log('');
+            console.log(`  Nota: el saldo USD devolvio ${usd.code} y se conto como 0.`);
+            console.log('  Con 500 "Sequence contains no elements" eso significa que el cliente no tiene');
+            console.log('  cuenta en dolares (bug conocido de tenencia). Con otro codigo, el total esta');
+            console.log('  subestimado.');
+          }
+
+          bru.setVar('valorizadoTotal', String(total));
+        }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  # Valorizado de un cliente
+
+  Replica el calculo de `ClientPortfolioService.ComposeTotalAsync` **por fuera del servicio**,
+  leg por leg, contra los mismos upstreams. Sirve para entender por que un caso de umbral dio
+  lo que dio, sin tener que leer logs.
+
+  Usa la variable `idCliente` del environment.
+
+  ```
+  total ARS = saldo ARS + saldo USD * MEP + valuacion del portafolio ARG
+  ```
+
+  | Leg | Si falla |
+  |---|---|
+  | `Saldo/{id}/Arg_ARS/Disponible/t0` | **requerido** -> valorizado desconocido |
+  | `Saldo/{id}/Arg_USD/Disponible/t0` | se toma **0** |
+  | `Portfolio/{id}/ARG?specie=0` | **requerido**, y nunca se defaultea a 0 |
+  | `api/Quotes/mep/referenceValue` | requerido solo si el saldo USD no es 0 |
+
+  ## El token necesita los dos scopes
+
+  `MS-TEN` **y** `MS-OS`. Tenencia reenvia el `Authorization` del caller a operatoria-simple
+  para pedir el MEP con el que convierte los activos en dolares, asi que con `MS-TEN` solo el
+  portafolio devuelve **500**. Verificado con un A/B de 5 corridas por tipo de token: 5/5
+  fallan con uno, 5/5 responden 200 con los dos.
+
+  ## Bugs conocidos de tenencia
+
+  - `Arg_USD` devuelve **500** `"Sequence contains no elements"` para todo cliente sin cuenta
+    en dolares (`SaldoDAO.cs:36` hace `.Single()` sin defensa). Por eso se cuenta como 0.
+  - `Arg_ARS` devuelve **500** `"Error converting data type numeric to numeric"` para algunos
+    clientes con montos muy grandes (por ejemplo el 1197453). Ese leg es requerido, asi que
+    esos clientes quedan sin valorizado — es el caso 8 de la matriz.

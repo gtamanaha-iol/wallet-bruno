@@ -1,0 +1,51 @@
+info:
+  name: "2 - Deposito de A (la esposa) - EL QUE SE CRUZA"
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1.0/Fondos/DepositarMovimientoRecaudadora"
+  auth: inherit
+  body:
+    type: json
+    data: |-
+      {
+        "Dni": "23153715", // CC: 341121
+        "Comprobante": "WAL806-R{{runId}}-C1A-{{$timestamp}}",
+        "Importe": {{importeCaso}},
+        "Referencia": "",
+        "IdRecaudadora": 1,
+        "Pais": 54,
+        "TipoCuenta": 1,
+        "Moneda": 1,
+        "TipoDepositoFondo": 3,
+        "TipoMovimiento": 1,
+        "EstadoOperacion": 1,
+        "FechaMovimiento": "{{$isoTimestamp}}",
+        "FechaTransferencia": "{{$isoTimestamp}}",
+        "ConceptoOperacion": "Credito por Transferencia",
+        "NombreOrdenante": "TEST WAL806",
+        "CuentaBancariaDestino": { "CBU": "0270100010036331160017" },
+        "CuentaBancariaOrigen": { "CBU": "0170099900000000000017" }
+      }
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.body.responseType
+      operator: eq
+      value: "success"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  Paso 2/4. EL BUG. Transferencia de A (11:48). Unico candidato: el informe de B.
+  CON FIX: descarta por identidad -> metodo 2 -> CC 341121 de A + espejo.
+  SIN FIX: lo toma -> CC 414843 de B.

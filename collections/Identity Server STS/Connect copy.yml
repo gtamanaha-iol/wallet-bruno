@@ -1,0 +1,30 @@
+info:
+  name: Connect copy
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: https://identity-server-sts.homo.invertironline.com/connect/token
+  body:
+    type: multipart-form
+    data:
+      - name: client_id
+        type: text
+        value: MS-OS
+      - name: client_secret
+        type: text
+        value: 2B2DFE5B-AF48-44C1-A749-ED2928D74EC9
+      - name: scope
+        type: text
+        value: MS-OS
+      - name: grant_type
+        type: text
+        value: client_credentials
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -1,0 +1,69 @@
+info:
+  name: 03 - Extraccion simple (887257)
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: "{{baseUrlLocal}}/api/v1/ExtraccionAutomatica/Extraer"
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "idCliente": 887257,
+        "tipoCuenta": 1,
+        "tipoExtraccion": 2,
+        "importe": 0.03,
+        "idCuentaBancariaDelClienteDestino": 0
+      }
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.body.data.result
+      operator: eq
+      value: "true"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  # Smoke test — una extraccion sola contra LOCAL
+
+  Un unico pedido, sin concurrencia. Verifica que la API local esta levantada y
+  responde, **antes** de correr los casos concurrentes.
+
+  **Esperado:** HTTP 200 con `result: true` y un `idCuentaMovim` distinto de 0.
+
+  Este request lo ejecuta Bruno directamente (sin scripts), asi que **si la API local
+  quedo con HTTPS va a fallar aca por el certificado self-signed**. Es el chequeo mas
+  rapido de que levantaste con el perfil HTTP-only:
+
+  ```
+  dotnet run --project src/IOL.CashOut.API --launch-profile "HOMOLOGACION (HTTP only - WAL-846 Bruno)"
+  ```
+
+  ## Cliente
+
+  | idCliente | CC (NumeCuen) | ID_CuenComi | SaldCuen (2026-08-04) |
+  |---|---|---|---|
+  | 887257 | 212714 | 266187 | 200.106.855.679 |
+
+  ## Que mirar si falla
+
+  | Respuesta | Significa |
+  |---|---|
+  | 200 + `result: true` | OK, se genero el movimiento |
+  | `unable to verify the first certificate` / ECONNREFUSED | La API local no esta levantada, o esta con HTTPS |
+  | 202 + "excede el límite de su Saldo" | El cliente se quedo sin saldo |
+  | 202 + "Ya existe una extracción en curso" | Lock vigente (ojo: se comparte con las instancias de homo) |
+
+  Genera **un movimiento real** en la base de homo, porque la API local apunta ahi.
