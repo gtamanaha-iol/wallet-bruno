@@ -1,0 +1,104 @@
+info:
+  name: 01 - Extraer (genera el movimiento)
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{baseUrlHomo}}/api/v1/ExtraccionAutomatica/Extraer"
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "idCliente": 887257,
+        "tipoCuenta": 1,
+        "tipoExtraccion": 2,
+        "importe": 0.03,
+        "idCuentaBancariaDelClienteDestino": 0
+      }
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.body.data.result
+      operator: eq
+      value: "true"
+  postResponse: |
+    // Deja el idCuentaMovim a mano para el SQL de siembra.
+    const id = res.body?.data?.idCuentaMovim;
+    console.log("idCuentaMovim =", id);
+    if (id) bru.setVar("idCuentaMovimWal893", id);
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  # 01 — Extraer
+
+  Genera **un movimiento real** en homo, con su `CuentaMovim`, su CBU de destino y el
+  **saldo comprometido**. Eso último es lo que después queremos ver liberarse.
+
+  Por eso conviene arrancar por acá y no insertando filas a mano: una fila insertada
+  a mano no tiene saldo comprometido, así que el paso final no probaría nada.
+
+  **Anotar el `idCuentaMovim` de la respuesta** — lo necesita el SQL de siembra.
+  Queda también en la variable `idCuentaMovimWal893`.
+
+  ## El caso de referencia
+
+  Replica el movimiento **53227160**, el último completado del cliente en homo:
+
+  | Campo | Valor |
+  |---|---|
+  | `ID_Cliente` | 887257 |
+  | `ID_Tipo_Cuenta` | 1 (Inversion_Argentina_Pesos) |
+  | `Id_Tipo_Transaccion` | 4 (ExtraccionFondos) |
+  | `ID_Tipo_Extraccion` | 2 (Transferencia electrónica) |
+  | `MontoXxx` | 1006.00 |
+  | `CBUDestX` | `0720429088000036001604` (Santander) |
+  | `BancOrig` | **27 = Supervielle** ← el banco que nos interesa |
+  | Estado final | 3 (Completada), 2025-10-01 |
+
+  El importe va en **0.03** en lugar de 1006 para no consumir saldo de más; lo demás
+  es igual.
+
+  ## Por qué `idCuentaBancariaDelClienteDestino: 0` y no la cuenta del CBU
+
+  Ese CBU pertenece a la cuenta **518122**, que está marcada `ID_Moneda = 2` (USD).
+  `ValidarMonedaExtraccionTipoCuenta` compara `ID_Moneda == tipoCuenta`, así que
+  pinnearla con `tipoCuenta: 1` la rechaza.
+
+  Con `0` el SP `scl_Cuenta_Bancaria_IOL` devuelve todas las cuentas del cliente y el
+  CBU se resuelve por la cuenta predeterminada — que es exactamente cómo salió el
+  movimiento de referencia.
+
+  ## Cuentas del cliente en homo
+
+  | ID_Cuenta | Moneda | Banco | Id_Estado_Cuenta | CBU |
+  |---|---|---|---|---|
+  | 307419 | ARS | Provincia | 2 | `0140000703100097152660` |
+  | 61464015 | ARS | Supervielle | 2 | `0270002110000067020017` |
+  | 516253 | ARS | Santander | 4 | `3110016611009027136107` |
+  | 518122 | USD | Santander | 4 | `0720429088000036001604` |
+
+  ⚠️ **Ninguna está en estado 1 (Aprobada)**, y `EsCuentaExtraccionValida` exige
+  `Id_Estado_cuenta == 1`. Si el request devuelve el mensaje de validación de cuenta
+  bancaria, es por esto y hay que aprobar una cuenta en homo antes de seguir.
+
+  ## Qué mirar si falla
+
+  | Respuesta | Significa |
+  |---|---|
+  | 200 + `result: true` | OK |
+  | 202 + mensaje de validación de cuenta bancaria | la cuenta no está aprobada (ver arriba) |
+  | 202 + "excede el límite de su Saldo" | el cliente se quedó sin saldo |
+  | 202 + "Ya existe una extracción en curso" | hay un lock vigente, esperar hasta 120s |
+  | 500 | error del servicio, mirar Loki |

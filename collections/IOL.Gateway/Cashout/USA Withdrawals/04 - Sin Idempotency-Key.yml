@@ -1,0 +1,43 @@
+info:
+  name: 04 - Sin Idempotency-Key
+  type: http
+  seq: 5
+
+http:
+  method: POST
+  url: "{{baseUrl}}/withdrawals/usa"
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "amount": {{usaWithdrawalAmount}},
+        "bankAccountId": {{usaBankAccountId}}
+      }
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        console.log(`[Sin key] ${res.status} — ${JSON.stringify(res.body)}`);
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "400"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  Mismo body del caso feliz, **sin** el header `Idempotency-Key`.
+
+  Espera **400** con `ValidationProblemDetails`: el header es `[Required]` en el Gateway, asi
+  que lo rechaza el model binding y la request nunca llega a CashOut.
+
+  No deja nada creado — se puede correr en cualquier orden.

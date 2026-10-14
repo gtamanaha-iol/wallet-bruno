@@ -5,19 +5,20 @@ info:
 
 http:
   method: POST
-  url: "{{baseUrl}}/api/v1/international-bank-account"
+  url: "{{baseUrl}}/api/v1/international-bank-accounts"
   body:
     type: json
     data: |-
       {
-        "clientId": 887257,
-        "accountHolderName": "account 2",
-        "bankAccountNumber": "123456789",
-        "currencyId": null,
-        "bankId": 2605,
-        "isFavorite": true,
-        "routingNumber": "021000021",
-        "abaIban": "US12345678901234567890"
+        "clientId": 436286, // ATO: 436286 - 537401
+        "accountHolderName": "Account with ATO",
+        "bankAccountNumber": "0071234567814",
+        "currencyId": 2,
+        "bankId": 2,
+        "isFavorite": false,
+        "bankCode": "026009593",
+        "bankCodeType": "Aba",
+        "accountStatementUrl": "https://pdfplaceholder.com/pdf/Estado+de+cuenta"
       }
 
 settings:
@@ -25,3 +26,4 @@ settings:
   timeout: 0
   followRedirects: true
   maxRedirects: 5
+  forwardAuthorizationHeader: true

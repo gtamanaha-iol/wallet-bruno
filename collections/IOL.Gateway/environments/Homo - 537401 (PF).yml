@@ -1,0 +1,26 @@
+name: Homo - 537401 (PF)
+variables:
+  - name: baseUrl
+    value: https://gateway.app.homo.invertironline.com
+  - name: identityServerUrl
+    value: https://api-gat-app-homologacion.invertironline.com
+  - name: username
+    value: registro_537401
+  - name: password
+    value: testeo123
+  - secret: true
+    name: token
+  - name: bankAccountIdentifier
+    value: "0290060510000000551857"
+  - name: verificationCode
+    value: "123456"
+  - name: bankAccountId
+    value:
+      type: number
+      data: "76468"
+  - name: usaIdempotencyKey
+    value: usa-1791989832898-410855
+  - name: usaWithdrawalId
+    value:
+      type: number
+      data: "62358739"

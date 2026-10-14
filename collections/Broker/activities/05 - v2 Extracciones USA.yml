@@ -1,0 +1,25 @@
+info:
+  name: 05 - v2 Extracciones USA
+  type: http
+  seq: 5
+
+http:
+  method: GET
+  url: "{{activitiesBaseUrl}}/api/v2/clients/{{clientUsa}}/movements?movementType=extraction&country=usa&currency=USD&startDate={{startDate}}&endDate={{endDate}}"
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  Versión v2 (la usa la app vía `v2/activities` del Gateway). Los filtros son listas: se pueden repetir (`state=confirmed&state=pending`).
+
+  **Esperado:** las mismas 9 extracciones que el request 02.

@@ -18,9 +18,22 @@ request:
   scripts:
     - type: before-request
       code: |-
+        // Los usuarios de prueba siguen la convencion registro_<ID_Cliente>, asi que un
+        // environment puede definir solo clientId y el usuario se deriva de ahi. No todos
+        // los clientes la cumplen (537401 entra con registro_620272): esos environments
+        // definen username literal y ese gana.
+        //
+        // El usuario se calcula en una variable local a proposito: escribirlo al environment
+        // lo deja pegado en el archivo y despues le gana a cualquier cambio de clientId.
         const identityServerUrl = bru.getEnvVar('identityServerUrl');
-        const username = bru.getEnvVar('username');
+        const clientId = String(bru.getEnvVar('clientId') || '').trim();
+        const usernameVar = String(bru.getEnvVar('username') || '').trim();
+        const username = usernameVar || (clientId ? `registro_${clientId}` : '');
         const password = bru.getEnvVar('password');
+
+        if (!username || !password) {
+          throw new Error('[Auth] falta username/clientId o password en el environment');
+        }
 
         const axios = require('axios');
         const body = `grant_type=password&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
@@ -34,6 +47,7 @@ request:
           if (token) {
             bru.setEnvVar('token', token);
             req.setHeader('Authorization', 'Bearer ' + token);
+            console.log(`[Auth] token de ${username} contra ${identityServerUrl}`);
           } else {
             console.error('[Auth] No token in response:', JSON.stringify(response.data));
           }

@@ -1,0 +1,41 @@
+info:
+  name: 07 - Confirmar (pendiente ticket service)
+  type: http
+  seq: 7
+
+http:
+  method: PATCH
+  url: "{{baseUrl}}/api/v1/usa-withdrawals/62358502/status"
+  headers:
+    - name: Content-Type
+      value: application/json
+    - name: X-Client-Id
+      value: C-IOL-BACKOFFICE
+  body:
+    type: json
+    data: |-
+      {
+        "newStatus": "settled",
+        "changedBy": "bruno",
+        "reason": "Prueba WAL-968"
+      }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  # 07 — En proceso → Confirmada
+
+  ⏳ **Hoy responde 500** (`UpdateStatusAsync` sin implementar). Queda armado para el
+  ticket del service, que lo conecta con `ConfirmWithdrawalAsync`.
+
+  ## Esperado (una vez conectado)
+
+  - 204. En la base: estado 6 (SETTLED), `HechoXXX = 1`, `Saldcuen` baja el monto una sola
+    vez y se genera el boleto (`tcl_boleto_movimiento_fondo`).
+  - Repetirlo: 409 y **no** vuelve a debitar.
+  - Desde Iniciada (sin pasar por 06): 409.

@@ -30,6 +30,14 @@ runtime:
           3: 'Baja_Pendiente', 4: 'Baja', 5: 'Suspendida', 6: 'PendienteDeAprobacionManual'
         };
 
+        // La API serializa los enums como strings camelCase (JsonStringEnumConverter), no numeros.
+        // Se normaliza a numero para poder comparar contra BLOQUEAN_ALTA.
+        const ESTADO_NUM = {
+          pendienteDeVerificacion: 0, aceptada: 1, rechazada: 2,
+          baja_Pendiente: 3, baja: 4, suspendida: 5, pendienteDeAprobacionManual: 6
+        };
+        const estadoNum = e => typeof e === 'number' ? e : (ESTADO_NUM[e] ?? e);
+
         const clientes = (bru.getEnvVar('clientesDePrueba') || '')
           .split(',')
           .map(s => s.trim())
@@ -60,7 +68,7 @@ runtime:
             continue;
           }
 
-          const aLimpiar = cuentas.filter(c => BLOQUEAN_ALTA.includes(c.estadoCuentaBancaria));
+          const aLimpiar = cuentas.filter(c => BLOQUEAN_ALTA.includes(estadoNum(c.estadoCuentaBancaria)));
           totalSalteadas += cuentas.length - aLimpiar.length;
 
           if (!aLimpiar.length) {
@@ -71,7 +79,7 @@ runtime:
           console.log(`cliente ${idCliente}: ${aLimpiar.length} de ${cuentas.length} cuenta(s) a dar de baja`);
 
           for (const c of aLimpiar) {
-            const desde = ESTADOS[c.estadoCuentaBancaria] ?? c.estadoCuentaBancaria;
+            const desde = ESTADOS[estadoNum(c.estadoCuentaBancaria)] ?? c.estadoCuentaBancaria;
 
             try {
               const r = await axios.post(

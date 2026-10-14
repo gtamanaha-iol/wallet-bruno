@@ -5,7 +5,7 @@ info:
 
 http:
   method: GET
-  url: "{{baseUrl}}/api/v1/international-bank-account/client/{{clientId}}"
+  url: "{{baseUrl}}/api/v1/international-bank-accounts/client/{{clientId}}"
 
 settings:
   encodeUrl: true

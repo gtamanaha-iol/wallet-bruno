@@ -1,10 +1,9 @@
 info:
   name: Clean
   type: folder
-  seq: 3
+  seq: 6
 
 request:
-  auth: none
   scripts:
     - type: before-request
       code: |-
@@ -35,14 +34,16 @@ request:
         bru.setVar('accessToken', tokenRes.data.access_token);
         req.setHeader('Authorization', 'Bearer ' + tokenRes.data.access_token);
 
-docs: |
-  # Clean
+docs:
+  content: |
+    # Clean
 
-  Deja los clientes de prueba en un estado desde el que se pueden volver a correr las altas.
+    Deja los clientes de prueba en un estado desde el que se pueden volver a correr las altas.
 
-  No borra filas: hace **baja logica** a estado `4` (`Baja`) de cada cuenta. Alcanza, porque
-  `BuscarCuentaDuplicada` solo bloquea un re-registro cuando la cuenta esta en `Aceptada (1)`,
-  `PendienteDeVerificacion (0)` o `PendienteDeAprobacionManual (6)`.
+    No borra filas: hace **baja logica** a estado `4` (`Baja`) de cada cuenta. Alcanza, porque
+    `BuscarCuentaDuplicada` solo bloquea un re-registro cuando la cuenta esta en `Aceptada (1)`,
+    `PendienteDeVerificacion (0)` o `PendienteDeAprobacionManual (6)`.
 
-  No existe endpoint de borrado fisico: `scl_eliminar_cuenta_retiro` solo se usa internamente
-  cuando un alta por alias resuelve a un CBU que el cliente ya tenia.
+    No existe endpoint de borrado fisico: `scl_eliminar_cuenta_retiro` solo se usa internamente
+    cuando un alta por alias resuelve a un CBU que el cliente ya tenia.
+  type: text/markdown

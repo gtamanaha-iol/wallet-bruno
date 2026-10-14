@@ -1,0 +1,58 @@
+info:
+  name: 01 - Extraccion USA
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{baseUrl}}/withdrawals/usa"
+  headers:
+    - name: Content-Type
+      value: application/json
+    - name: Idempotency-Key
+      value: "{{usaIdempotencyKey}}"
+  body:
+    type: json
+    data: |-
+      {
+        "amount": 1157,
+        "bankAccountId": {{usaBankAccountId}}
+      }
+
+runtime:
+  variables:
+    - name: usaBankAccountId
+      value: "71"
+  scripts:
+    - type: before-request
+      code: |-
+        // Key nueva en cada corrida: con una fija el segundo run devolveria la extraccion
+        // del run anterior y este request dejaria de probar el alta.
+        bru.setEnvVar('usaIdempotencyKey', `usa-${Date.now()}-${Math.floor(Math.random() * 1e6)}`);
+    - type: after-response
+      code: |-
+        const id = res.body && res.body.id;
+        // Lo levantan el 02 (compara el id), el 03 (reusa la key con otro body) y el 10/11 (cancelan).
+        bru.setEnvVar('usaWithdrawalId', id);
+        console.log(`[USA] extraccion ${id} creada — key ${bru.getEnvVar('usaIdempotencyKey')}`);
+        console.log('[USA] queda en FundsHeld con fondos retenidos: el 10 la cancela');
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "201"
+    - expression: res.body.id
+      operator: isNumber
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  Caso feliz. `POST withdrawals/usa` con `Idempotency-Key` nueva.
+
+  Espera **201** con `{ "id": <int> }`. El script guarda el `id` y la key para el `02` y el `03`.
+
+  Crea una extraccion real en **FundsHeld** y retiene `usaWithdrawalAmount` USD.

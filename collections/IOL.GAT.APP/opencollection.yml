@@ -1,0 +1,59 @@
+opencollection: 1.0.0
+
+info:
+  name: IOL.GAT.APP
+config:
+  proxy:
+    inherit: true
+    config:
+      protocol: http
+      hostname: ""
+      port: ""
+      auth:
+        username: ""
+        password: ""
+      bypassProxy: ""
+
+request:
+  scripts:
+    - type: before-request
+      code: |-
+        // IOL.GAT.APP (api-gat-app) emite el token en su propio /token. La app manda el
+        // access_token como Bearer; access_token_api_terceros viene vacio para estos usuarios.
+        const baseUrl = bru.getEnvVar('baseUrl');
+        const clientId = String(bru.getEnvVar('clientId') || '').trim();
+        const usernameVar = String(bru.getEnvVar('username') || '').trim();
+        const username = usernameVar || (clientId ? `registro_${clientId}` : '');
+        const password = bru.getEnvVar('password');
+
+        if (!username || !password) {
+          throw new Error('[Auth] falta username/clientId o password en el environment');
+        }
+
+        const axios = require('axios');
+        const body = `grant_type=password&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
+
+        try {
+          const response = await axios.post(`${baseUrl}/token`, body, {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+          });
+
+          const token = response.data.access_token || response.data.access_token_api_terceros;
+          if (token) {
+            bru.setEnvVar('token', token);
+            req.setHeader('Authorization', 'Bearer ' + token);
+            console.log(`[Auth] token de ${username} contra ${baseUrl}`);
+          } else {
+            console.error('[Auth] No token in response:', JSON.stringify(response.data));
+          }
+        } catch (err) {
+          const detail = err.response ? JSON.stringify(err.response.data) : err.message;
+          console.error('[Auth] Token request failed:', detail);
+          throw new Error(`Token request failed: ${detail}`);
+        }
+bundled: false
+extensions:
+  bruno:
+    ignore:
+      - node_modules
+      - .git

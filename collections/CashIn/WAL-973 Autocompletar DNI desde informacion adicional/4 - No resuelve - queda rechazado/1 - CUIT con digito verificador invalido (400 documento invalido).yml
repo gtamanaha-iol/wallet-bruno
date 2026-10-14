@@ -1,0 +1,56 @@
+info:
+  name: "1 - CUIT con digito verificador invalido (400 documento invalido)"
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1.0/Fondos/DepositarMovimientoRecaudadora"
+  auth: inherit
+  body:
+    type: json
+    data: |-
+      {
+        "Dni": "",
+        "Comprobante": "WAL973-R{{runId}}-DVMAL-{{$timestamp}}",
+        "Importe": {{importe_cuitInvalido}},
+        "Referencia": "",
+        "InformacionAdicional": "Datos Adicionales:{PROVEEDORES;20398105003 PEREZ JUAN TEST;;};",
+        "IdRecaudadora": 1,
+        "Pais": 54,
+        "TipoCuenta": 1,
+        "Moneda": 1,
+        "TipoDepositoFondo": 3,
+        "TipoMovimiento": 1,
+        "EstadoOperacion": 1,
+        "FechaMovimiento": "{{$isoTimestamp}}",
+        "FechaTransferencia": "{{$isoTimestamp}}",
+        "ConceptoOperacion": "Credito por Transferencia",
+        "NombreOrdenante": "TEST WAL973",
+        "CuentaBancariaDestino": { "CBU": "0270100010036331160017" },
+        "CuentaBancariaOrigen": { "CBU": "0170099900000000000017" }
+      }
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "400"
+    - expression: res.body.responseType
+      operator: eq
+      value: "invalidRequest"
+    - expression: res.body.message
+      operator: contains
+      value: "documento del ordenante"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  El CUIT 20398105003 tiene el digito verificador mal (el valido es 20398105002). La regex lo
+  encuentra pero lo descarta: no se acredita con un numero que no es un CUIT real.
+  Esperado: 400 "El numero de documento del ordenante debe ser mayor a 0" (queda para gestion
+  manual, igual que hoy). Metrica: dni_source="none".

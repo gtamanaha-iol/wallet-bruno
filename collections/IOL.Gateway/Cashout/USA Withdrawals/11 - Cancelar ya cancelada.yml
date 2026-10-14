@@ -1,0 +1,32 @@
+info:
+  name: 11 - Cancelar ya cancelada
+  type: http
+  seq: 12
+
+http:
+  method: POST
+  url: "{{baseUrl}}/withdrawals/usa/{{usaWithdrawalId}}/cancel"
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        const detail = (res.body && res.body.detail) || '';
+        console.log(`[Cancelar de nuevo] ${res.status} — ${detail || JSON.stringify(res.body)}`);
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "409"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  Repite la cancelacion del `10` sobre la misma extraccion.
+
+  Espera **409**: la extraccion ya esta en Cancelled y no puede volver a cancelarse. Es el mismo
+  status que devuelve CashOut cuando el backoffice ya la paso a En proceso.

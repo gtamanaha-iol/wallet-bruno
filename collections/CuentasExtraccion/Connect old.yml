@@ -1,0 +1,40 @@
+info:
+  name: Connect old
+  type: http
+  seq: 4
+
+http:
+  method: POST
+  url: https://identity-server-homologacion.invertironline.com/connect/token
+  headers:
+    - name: Content-Type
+      value: application/x-www-form-urlencoded
+  body:
+    type: form-urlencoded
+    data:
+      - name: client_id
+        value: C-CEX
+      - name: client_secret
+        value: 054XPD63-N1R3-QZ6B-CUEX-8T09034BM9Y1
+      - name: scope
+        value: PR-BIND
+      - name: grant_type
+        value: client_credentials
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  # Connect old
+
+  Reproduce el pedido de token que hace el servicio (`IdentityModel.AspNetCore`,
+  `application/x-www-form-urlencoded`) contra el host **viejo** del identity que usa el
+  `appsettings` de homo: `identity-server-homologacion.invertironline.com`.
+
+  Es el que devuelve `500 Internal Server Error`. Compararlo con **Connect sts** (host nuevo
+  `identity-server-sts.homo...`, que responde 200) confirma que el servicio apunta al host roto.

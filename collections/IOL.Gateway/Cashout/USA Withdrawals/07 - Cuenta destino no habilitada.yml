@@ -1,0 +1,49 @@
+info:
+  name: 07 - Cuenta destino no habilitada
+  type: http
+  seq: 8
+
+http:
+  method: POST
+  url: "{{baseUrl}}/withdrawals/usa"
+  headers:
+    - name: Content-Type
+      value: application/json
+    - name: Idempotency-Key
+      value: "{{usaIdempotencyKeyTmp}}"
+  body:
+    type: json
+    data: |-
+      {
+        "amount": {{usaWithdrawalAmount}},
+        "bankAccountId": {{usaBankAccountIdPending}}
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |-
+        bru.setVar('usaIdempotencyKeyTmp', `usa-pending-${Date.now()}`);
+    - type: after-response
+      code: |-
+        console.log(`[No habilitada] ${res.status} — ${(res.body && res.body.detail) || JSON.stringify(res.body)}`);
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "422"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  Cuenta **propia del cliente** pero en estado `PendingVerification` (`usaBankAccountIdPending`).
+
+  Espera **422** — `"The bank account is not enabled."`. Solo `Accepted` habilita la
+  extraccion; CashOut compara el estado con `StringComparison.Ordinal`.
+
+  Para probar la variante `Rejected`, cambiar el body a `{{usaBankAccountIdRejected}}`: el
+  resultado esperado es el mismo 422 con el mismo mensaje.

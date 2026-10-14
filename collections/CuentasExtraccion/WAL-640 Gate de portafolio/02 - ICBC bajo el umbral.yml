@@ -1,0 +1,173 @@
+info:
+  name: 02 - ICBC bajo el umbral
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/CuentasExtraccion/AltaCuentaExtraccion"
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      { // Con Gate: Acepta - Sin Gate: Pendiente
+        "idCliente": 401243,  // cc: 158064 Anda el login
+        "moneda": 1,
+        "tipoIdentificacionCuentaRetiro": 1024,
+        "identificadorCuentaRetiro": "0150501601000271781096",
+        "tipoCuentaBancaria": 1
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |-
+        // Baja previa, para que el alta no choque con BuscarCuentaDuplicada.
+        // Solo hace falta si la cuenta esta en un estado que bloquea el re-registro:
+        // Aceptada (1), PendienteDeVerificacion (0) o PendienteDeAprobacionManual (6).
+        const axios = require('axios');
+
+        const ESTADO_NUM = { pendienteDeVerificacion:0, aceptada:1, rechazada:2, baja_Pendiente:3, baja:4, suspendida:5, pendienteDeAprobacionManual:6 };
+        const MONEDA_NUM = { pesosArgentinos:1, dolaresUsa:2 };
+        const estadoNum = e => typeof e === 'number' ? e : (ESTADO_NUM[e] ?? e);
+        const monedaNum = m => typeof m === 'number' ? m : (MONEDA_NUM[m] ?? m);
+
+        const ID_CLIENTE = 401243;  // cc: 158064
+        const CBU        = '0150501601000271781096';
+        const MONEDA     = 1;
+        const BLOQUEAN   = [0, 1, 6];
+
+        const baseUrl = bru.getEnvVar('baseUrl');
+        const headers = {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + bru.getVar('accessToken')
+        };
+
+        const listado = await axios.get(
+          `${baseUrl}/api/v1/CuentasExtraccion/ObtenerCuentasExtraccion/${ID_CLIENTE}`, { headers });
+        const previa = ((listado.data && listado.data.data) || [])
+          .find(c => c.numeroCbu === CBU && monedaNum(c.moneda) === MONEDA);
+
+        if (previa && BLOQUEAN.includes(estadoNum(previa.estadoCuentaBancaria))) {
+          await axios.post(
+            `${baseUrl}/api/v1/BajaCuentaExtraccion/EjecutarBajaCuentaExtraccion`,
+            { idCliente: ID_CLIENTE, idCuenta: previa.idCuenta, idAccion: 4 },
+            { headers });
+          console.log(`[setup] cuenta ${previa.idCuenta} estaba en estado ${estadoNum(previa.estadoCuentaBancaria)}, se dio de baja para poder re-dar de alta`);
+        } else if (previa) {
+          console.log(`[setup] cuenta ${previa.idCuenta} en estado ${estadoNum(previa.estadoCuentaBancaria)}: no bloquea el alta`);
+        } else {
+          console.log('[setup] el cliente no tiene esta cuenta: el alta la va a crear');
+        }
+    - type: after-response
+      code: |-
+        // Caso 2: ICBC bajo el umbral
+        const axios = require('axios');
+
+        const ESTADO_NUM = { pendienteDeVerificacion:0, aceptada:1, rechazada:2, baja_Pendiente:3, baja:4, suspendida:5, pendienteDeAprobacionManual:6 };
+        const MONEDA_NUM = { pesosArgentinos:1, dolaresUsa:2 };
+        const estadoNum = e => typeof e === 'number' ? e : (ESTADO_NUM[e] ?? e);
+        const monedaNum = m => typeof m === 'number' ? m : (MONEDA_NUM[m] ?? m);
+
+        const ID_CLIENTE = 401243;  // cc: 158064
+        const CBU        = '0150501601000271781096';
+        const MONEDA     = 1;
+        const ESPERADO   = 1;   // Aceptada
+
+        const ESTADOS = {
+          0: 'PendienteDeVerificacion', 1: 'Aceptada', 2: 'Rechazada',
+          3: 'Baja_Pendiente', 4: 'Baja', 5: 'Suspendida', 6: 'PendienteDeAprobacionManual'
+        };
+        const nombre = v => v === null ? 'NO ESTA' : `${ESTADOS[v] ?? v} (${v})`;
+
+        const headers = {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + bru.getVar('accessToken')
+        };
+
+        const baseUrl = bru.getEnvVar('baseUrl');
+        const cuerpo  = (res.body && res.body.data) || {};
+        const detalle = cuerpo.detalleResultadoValidacion || '';
+
+        // Se relee del listado en vez de confiar en la respuesta del alta: asi se verifica
+        // lo que quedo realmente persistido, que es lo que puede diferir si el guard del
+        // stored procedure descarta la escritura de estado.
+        const listado = await axios.get(
+          `${baseUrl}/api/v1/CuentasExtraccion/ObtenerCuentasExtraccion/${ID_CLIENTE}`,
+          { headers });
+        const cuenta = ((listado.data && listado.data.data) || [])
+          .find(c => c.numeroCbu === CBU && monedaNum(c.moneda) === MONEDA);
+        const estado = cuenta ? estadoNum(cuenta.estadoCuentaBancaria) : null;
+
+        const ok = estado === ESPERADO;
+
+        console.log('ICBC bajo el umbral');
+        console.log(`cliente ${ID_CLIENTE} | ICBC | ${CBU}`);
+        console.log('');
+        console.log(`  cuenta    ${cuenta ? cuenta.idCuenta : '-'}`);
+        console.log(`  estado    ${nombre(estado)}`);
+        console.log(`  esperado  ${nombre(ESPERADO)}`);
+        console.log(`  detalle   ${detalle || '(vacio)'}`);
+        console.log('');
+        console.log(ok ? '  OK' : '  FALLA');
+
+        // Si el proveedor no resolvio el CBU, el alta ni siquiera llega al gate: se aclara
+        // para no leerlo como una falla del gate.
+        if (!ok && /error|no pudimos|timeout|tecnic/i.test(detalle)) {
+          console.log('');
+          console.log('  OJO: BIND/SUPV no resolvio el CBU, asi que el gate NO se ejercito.');
+          console.log('  El alta pasa rechazarSiFalla=false y cae en ErrorValidacionBind, dejando');
+          console.log('  la cuenta con el estado que le puso el insert.');
+        }
+
+        bru.setVar('caso2Ok', String(ok));
+  assertions:
+    - expression: bru.getVar("caso2Ok")
+      operator: eq
+      value: "true"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  # Caso 2 — ICBC bajo el umbral
+
+  El caso central del ticket: entidad que hoy va a revision manual, cliente de portafolio chico.
+
+  | | |
+  |---|---|
+  | Cliente | `1201113` |
+  | Identificador | `0150000400097950212616` |
+  | Entidad | ICBC |
+  | Moneda | 1 (PesosArgentinos) |
+  | Tipo de cuenta | 1 (CajaAhorro) |
+  | Estado esperado | **Aceptada (1)** |
+
+  Valorizado en la corrida del 2026-08-20: **146.831,00** (saldo ARS -2.597, USD 200, portafolio
+  -157.590). Bajo el millon, asi que el gate lo aprueba.
+
+  El mismo cliente tiene otra cuenta de ICBC en el caso 9, que **no** debe aprobarse porque le falla
+  la identidad. Los dos juntos prueban que un portafolio chico no compensa un CUIT que no matchea.
+
+  ---
+
+  ## Como corre
+
+  1. **Setup** (`before-request`): si el cliente ya tiene esta cuenta en un estado que bloquea el
+     re-registro (`0`, `1` o `6`), le hace una baja logica a `4`. Asi el request es repetible sin
+     depender del CLEAN.
+  2. **Alta**: `POST AltaCuentaExtraccion`. Es el endpoint sin 2FA, el que usa corenet.
+  3. **Verificacion** (`after-response`): relee el listado del cliente y compara el estado
+     **persistido** contra el esperado.
+
+  El alta es idempotente sobre la misma cuenta: `scl_iutcl_Cuenta_Retiro` matchea por
+  `(id_cliente, CBU, moneda, numecuen)` y hace UPDATE si ya existe, asi que se reusa el mismo
+  `ID_Cuenta` en vez de acumular filas.
+
+  `tipoIdentificacionCuentaRetiro: 1024` es Autodetectar: el servicio deduce si es CBU, CVU o alias.

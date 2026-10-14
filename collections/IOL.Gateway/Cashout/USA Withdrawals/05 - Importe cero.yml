@@ -1,0 +1,50 @@
+info:
+  name: 05 - Importe cero
+  type: http
+  seq: 6
+
+http:
+  method: POST
+  url: "{{baseUrl}}/withdrawals/usa"
+  headers:
+    - name: Content-Type
+      value: application/json
+    - name: Idempotency-Key
+      value: "{{usaIdempotencyKeyTmp}}"
+  body:
+    type: json
+    data: |-
+      {
+        "amount": 0,
+        "bankAccountId": {{usaBankAccountId}}
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |-
+        // Key descartable: el caso a probar es el importe, no una key reusada.
+        bru.setVar('usaIdempotencyKeyTmp', `usa-cero-${Date.now()}`);
+    - type: after-response
+      code: |-
+        console.log(`[Importe cero] ${res.status} — ${(res.body && res.body.detail) || JSON.stringify(res.body)}`);
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "400"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  `amount: 0` con una key nueva.
+
+  Espera **400**. El Gateway no valida el importe: lo rechaza CashOut con
+  `[Range(0.01, ...)]` y el Gateway reenvia el 400 como `ProblemDetails`.
+
+  Por eso el `detail` viene con el texto crudo de CashOut, no con el formato de
+  `ValidationProblemDetails` del request `04`.

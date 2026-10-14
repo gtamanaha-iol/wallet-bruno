@@ -1,0 +1,118 @@
+info:
+  name: WAL-917
+  type: folder
+  seq: 4
+
+request:
+  auth: none
+  scripts:
+    - type: before-request
+      code: |-
+        // Token (client_credentials, scope MS-CEX). Igual que la carpeta API.
+        const identityUrl  = bru.getEnvVar('identityUrl');
+        const clientId     = bru.getEnvVar('clientId');
+        const clientSecret = bru.getEnvVar('clientSecret');
+        const scope        = bru.getEnvVar('scope');
+
+        if (!identityUrl || !clientId || !clientSecret) {
+          throw new Error('[Auth] falta seleccionar un environment (Local u Homologacion)');
+        }
+
+        const axios = require('axios');
+        const tokenBody = 'grant_type=client_credentials'
+                        + '&client_id=' + encodeURIComponent(clientId)
+                        + '&client_secret=' + encodeURIComponent(clientSecret)
+                        + '&scope=' + encodeURIComponent(scope);
+
+        const tokenRes = await axios.post(identityUrl + '/connect/token', tokenBody, {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        });
+
+        if (!tokenRes.data.access_token) {
+          throw new Error('[Auth] sin access_token: ' + JSON.stringify(tokenRes.data));
+        }
+
+        bru.setVar('accessToken', tokenRes.data.access_token);
+        req.setHeader('Authorization', 'Bearer ' + tokenRes.data.access_token);
+
+docs:
+  content: |
+    # WAL-917 — Cuenta bancaria duplicada en alta
+
+    Reproduce en HOMO uno de los dos mecanismos de duplicación documentados en
+    [wallet-docs/issues/2026-09-03 cuentas bancarias duplicadas en alta](../../../../../git/wallet-docs/issues/2026-09-03%20cuentas%20bancarias%20duplicadas%20en%20alta/01-causa-raiz.md):
+    el de **bancos cuyo `NumeCuen` depende de `TipoCuentaBancaria`** (Supervielle=27,
+    Santander Río=72, Patagonia=317, Provincia de Córdoba=20).
+
+    No requiere 2FA ni el endpoint legacy: alcanza con el endpoint moderno
+    **sin 2FA** `POST CuentasExtraccion/AltaCuentaExtraccion` (el mismo que usa corenet),
+    llamado dos veces con **el mismo CBU** pero **distinto `tipoCuentaBancaria`**.
+
+    ## Por qué funciona
+
+    El SP `scl_iutcl_Cuenta_Retiro` busca la cuenta existente por
+    `(id_cliente, CBU, moneda, NumeCuen)`. Para Supervielle, `Scl_Cuenta_retiro_cbu` calcula:
+
+    ```sql
+    Select @Salida = Case When @TipoCuenta = 1 Then '021' Else '020' End + Substring(@CBU, 10, 12)
+    ```
+
+    Mismo CBU, `TipoCuenta=1` → `NumeCuen` empieza con `021...`; `TipoCuenta=2` → empieza con
+    `020...`. Como no coinciden, el segundo alta no encuentra la fila del primero e **inserta
+    una cuenta nueva** en vez de actualizar.
+
+    ## Datos de prueba
+
+    | Campo | Valor |
+    |---|---|
+    | Cliente | `1200862` (cliente de scratch usado para pruebas manuales varias en homo) |
+    | CBU | `0270002110000067020017` (Supervielle, **real** — ya validado por BIND en homo: `detalle_servicio_interbanking = "Cuenta habilitada por Supervielle."`) |
+    | Moneda | 1 (ARS) |
+
+    Encontrado por SQL homo:
+
+    ```sql
+    SELECT TOP 10 ID_Cliente, ID_Cuenta, CBUXXXXX, TipoCuen, NumeCuen, ID_Estado_Cuenta, detalle_servicio_interbanking
+    FROM Tcl_Cuenta_Retiro
+    WHERE ID_Banco = 27 AND ID_Grupo_Tipo_Cuenta = 3 AND ID_Estado_Cuenta = 1
+    ORDER BY ID_Cuenta DESC
+    ```
+
+    `NumeCuen` esperado: `021000006702001` (TipoCuenta=1) vs `020000006702001` (TipoCuenta=2).
+
+    ## Orden
+
+    1. **01 - Alta TipoCuenta 1** — el CBU ya existe como cuenta `61464101`, `Aceptada (1)`.
+       El request es idempotente (el SP la matchea por `NumeCuen` y actualiza), sirve para
+       dejar `cuenta1Id` con el id real.
+    2. **02 - Baja logica** — da de baja esa cuenta. Necesario: `Aceptada (1)` es uno de los
+       estados que bloquea `BuscarCuentaDuplicada` (`0`, `1`, `6`) — en prod este paso lo
+       reemplaza el paso del tiempo (la cuenta cambia de estado sola, o el usuario la vuelve
+       a intentar meses después).
+    3. **03 - Alta TipoCuenta 2** — mismo CBU, `tipoCuentaBancaria: 2`. Como ya no bloquea el
+       guard de aplicación, llega al SP con `NumeCuen='020...'` y **crea una segunda fila**.
+       El `after-response` relee `ObtenerCuentasExtraccion` y falla la aserción si no aparecen
+       al menos 2 `NumeCuen` distintos para ese CBU (no se cuentan filas totales: este CBU ya
+       tenía una fila vieja en `Baja` del mismo `NumeCuen`, de pruebas manuales previas).
+
+    ## Validar por SQL (homo)
+
+    ```sql
+    SELECT ID_Cuenta, ID_Cliente, CBUXXXXX, TipoCuen, NumeCuen, ID_Estado_Cuenta, fecha_actualizacion_estado
+    FROM Tcl_Cuenta_Retiro
+    WHERE ID_Cliente = 1200862 AND CBUXXXXX = '0270002110000067020017'
+    ORDER BY ID_Cuenta
+    ```
+
+    Debe devolver **2 filas** con `ID_Cuenta` distinto y `NumeCuen` distinto (`021...` / `020...`).
+
+    ## Para repetir la prueba
+
+    Correr **`00 - Clean (solo este CBU)`** antes de volver a correr `01`. El CLEAN de la
+    carpeta raíz **no sirve acá**: `1200862` no está en `clientesDePrueba` (a propósito, es
+    un cliente de scratch compartido con otras pruebas manuales, no exclusivo de esta
+    carpeta) y ese CLEAN además recorrería *todas* sus cuentas, no solo la de este CBU.
+
+    Las filas duplicadas que ya se crearon quedan igual en la base — ninguno de los dos
+    CLEAN borra físicamente, solo mandan a `Baja (4)`. Es a propósito: son la evidencia.
+  type: text/markdown

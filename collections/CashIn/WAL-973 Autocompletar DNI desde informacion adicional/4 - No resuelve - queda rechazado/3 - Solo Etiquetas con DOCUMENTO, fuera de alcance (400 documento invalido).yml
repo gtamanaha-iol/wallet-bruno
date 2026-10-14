@@ -1,0 +1,58 @@
+info:
+  name: "3 - Solo Etiquetas con DOCUMENTO, fuera de alcance (400 documento invalido)"
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1.0/Fondos/DepositarMovimientoRecaudadora"
+  auth: inherit
+  body:
+    type: json
+    data: |-
+      {
+        "Dni": "",
+        "Comprobante": "WAL973-R{{runId}}-ETIQ-{{$timestamp}}",
+        "Importe": {{importe_soloEtiquetas}},
+        "Referencia": "",
+        "InformacionAdicional": "Etiquetas:{CONCEPTO:Transferencia recibida;NOMBRE:PEREZ JUAN TEST;DOCUMENTO:39810500;REFERENCIA:VARIOS;};",
+        "IdRecaudadora": 1,
+        "Pais": 54,
+        "TipoCuenta": 1,
+        "Moneda": 1,
+        "TipoDepositoFondo": 3,
+        "TipoMovimiento": 1,
+        "EstadoOperacion": 1,
+        "FechaMovimiento": "{{$isoTimestamp}}",
+        "FechaTransferencia": "{{$isoTimestamp}}",
+        "ConceptoOperacion": "Credito por Transferencia",
+        "NombreOrdenante": "TEST WAL973",
+        "CuentaBancariaDestino": { "CBU": "0270100010036331160017" },
+        "CuentaBancariaOrigen": { "CBU": "0170099900000000000017" }
+      }
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "400"
+    - expression: res.body.responseType
+      operator: eq
+      value: "invalidRequest"
+    - expression: res.body.message
+      operator: contains
+      value: "documento del ordenante"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  Documenta un limite conocido: la regex solo mira el bloque "Datos Adicionales:{...}". El
+  campo DOCUMENTO de "Etiquetas:{...}" NO se lee (formato no medido en prod, queda como
+  follow-up). Esperado: 400, igual que hoy.
+
+  Si algun dia se amplia la regex a Etiquetas, ESTE test deberia pasar a 200 y moverse a la
+  carpeta 1.

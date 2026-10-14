@@ -1,0 +1,42 @@
+info:
+  name: 06 - Pasar a En proceso (pendiente ticket service)
+  type: http
+  seq: 6
+
+http:
+  method: PATCH
+  url: "{{baseUrl}}/api/v1/usa-withdrawals/62358502/status"
+  headers:
+    - name: Content-Type
+      value: application/json
+    - name: X-Client-Id
+      value: C-IOL-BACKOFFICE
+  body:
+    type: json
+    data: |-
+      {
+        "newStatus": "dispatched",
+        "changedBy": "bruno",
+        "reason": "Prueba WAL-968"
+      }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  # 06 — Iniciada → En proceso
+
+  ⏳ **Hoy responde 500** (`UpdateStatusAsync` sin implementar). Queda armado para el
+  ticket del service, que lo conecta con `MarkInTransitAsync`.
+
+  `X-Client-Id: C-IOL-BACKOFFICE` es el client privilegiado de `UsaWithdrawalOptions`
+  (el backoffice puede cambiar a cualquier estado). `usaWithdrawalId` lo dejan el 01 o el 05.
+
+  ## Esperado (una vez conectado)
+
+  - 204. En la base: estado 3 (DISPATCHED) y `FechaEnTransito` cargada; `HechoXXX` sigue en 0.
+  - Repetirlo: 409 (ya no está en Iniciada).

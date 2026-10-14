@@ -1,0 +1,101 @@
+info:
+  name: 03 - Alta TipoCuenta 2 - dispara el duplicado
+  type: http
+  seq: 4
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/CuentasExtraccion/AltaCuentaExtraccion"
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "idCliente": 1200862,
+        "moneda": 1,
+        "tipoIdentificacionCuentaRetiro": 1024,
+        "identificadorCuentaRetiro": "0270002110000067020017",
+        "tipoCuentaBancaria": 2
+      }
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        // Mismo CBU que 01, pero tipoCuentaBancaria=2 -> Scl_Cuenta_retiro_cbu calcula
+        // NumeCuen='020...' en vez de '021...'. El SP no encuentra la fila de 01 (que
+        // busca por id_cliente+CBU+moneda+NumeCuen) y crea una cuenta nueva.
+        const axios = require('axios');
+        const ID_CLIENTE = 1200862;
+        const CBU = '0270002110000067020017';
+
+        const cuentaNueva = (res.body && res.body.data) || {};
+        console.log(`Cuenta ${cuentaNueva.idCuenta} creada (TipoCuenta=2) | estado ${cuentaNueva.estadoCuentaBancaria}`);
+
+        const baseUrl = bru.getEnvVar('baseUrl');
+        const headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + bru.getVar('accessToken') };
+        const listado = await axios.get(`${baseUrl}/api/v1/CuentasExtraccion/ObtenerCuentasExtraccion/${ID_CLIENTE}`, { headers });
+        const cuentas = ((listado.data && listado.data.data) || []).filter(c => c.numeroCbu === CBU);
+        const numeCuenDistintos = new Set(cuentas.map(c => c.numeroCuenta));
+
+        console.log('');
+        console.log(`Cuentas con CBU ${CBU} para el cliente ${ID_CLIENTE}: ${cuentas.length} fila(s), ${numeCuenDistintos.size} NumeCuen distinto(s)`);
+        for (const c of cuentas) {
+          console.log(`  idCuenta=${c.idCuenta} | tipoCuentaBancaria=${c.tipoCuentaBancaria} | numeroCuenta=${c.numeroCuenta} | estado=${c.estadoCuentaBancaria}`);
+        }
+        console.log('');
+        // Ojo: este cliente/CBU ya tenia historial de pruebas manuales previas (fila
+        // 61464097, misma NumeCuen), asi que no sirve contar filas totales — lo que
+        // prueba el duplicado es que aparezca un segundo NumeCuen ('020...') ademas
+        // del original ('021...').
+        console.log(numeCuenDistintos.size >= 2
+          ? '  DUPLICADO REPRODUCIDO: hay filas con distinto NumeCuen para el mismo CBU.'
+          : `  No se reprodujo (se esperaban >=2 NumeCuen distintos, hay ${numeCuenDistintos.size}). Revisar si el paso 02 corrio antes.`);
+
+        bru.setVar('numeCuenDistintos', String(numeCuenDistintos.size));
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: bru.getVar("numeCuenDistintos")
+      operator: gte
+      value: "2"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  # 03 — Alta con TipoCuenta 2 (Cuenta Corriente) — dispara el duplicado
+
+  Mismo `idCliente` y mismo CBU que el paso `01`, pero `tipoCuentaBancaria: 2`.
+
+  Como la cuenta del paso `01` ya no bloquea (se dio de baja en `02`), el request llega
+  al SP `scl_iutcl_Cuenta_Retiro` en vez de cortar en `BuscarCuentaDuplicada`. El SP
+  recalcula `NumeCuen` para Supervielle según `TipoCuenta`:
+
+  | TipoCuenta | NumeCuen |
+  |---|---|
+  | 1 (paso 01) | `021000006702001` |
+  | 2 (este paso) | `020000006702001` |
+
+  No coinciden → el SP no encuentra la fila de `01` → **inserta una cuenta nueva**.
+
+  El `after-response` relee `ObtenerCuentasExtraccion` y cuenta cuántos `numeroCuenta`
+  (`NumeCuen`) **distintos** hay para ese CBU — no la cantidad de filas, porque este
+  cliente/CBU ya tenía historial de pruebas manuales previas con el mismo `NumeCuen`. La
+  aserción espera **2 o más** valores distintos.
+
+  ## Validar en SQL (homo)
+
+  ```sql
+  SELECT ID_Cuenta, ID_Cliente, CBUXXXXX, TipoCuen, NumeCuen, ID_Estado_Cuenta, fecha_actualizacion_estado
+  FROM Tcl_Cuenta_Retiro
+  WHERE ID_Cliente = 1200862 AND CBUXXXXX = '0270002110000067020017'
+  ORDER BY ID_Cuenta
+  ```

@@ -1,10 +1,9 @@
 info:
-  name: WAL-640 Gate de portafolio
+  name: WAL-640
   type: folder
-  seq: 2
+  seq: 3
 
 request:
-  auth: none
   scripts:
     - type: before-request
       code: |-
@@ -16,6 +15,11 @@ request:
         //   del caller a operatoria-simple para pedir el MEP con el que convierte los
         //   activos en dolares, asi que con MS-TEN solo el portafolio devuelve 500.
         const axios = require('axios');
+
+        const ESTADO_NUM = { pendienteDeVerificacion:0, aceptada:1, rechazada:2, baja_Pendiente:3, baja:4, suspendida:5, pendienteDeAprobacionManual:6 };
+        const MONEDA_NUM = { pesosArgentinos:1, dolaresUsa:2 };
+        const estadoNum = e => typeof e === 'number' ? e : (ESTADO_NUM[e] ?? e);
+        const monedaNum = m => typeof m === 'number' ? m : (MONEDA_NUM[m] ?? m);
 
         const identityUrl  = bru.getEnvVar('identityUrl');
         const clientId     = bru.getEnvVar('clientId');
@@ -55,29 +59,75 @@ request:
           console.log('[Auth] sin token de valorizado: ' + e.message);
         }
 
-docs: |
-  # WAL-640 — Gate de portafolio
+docs:
+  content: |
+    # WAL-640
 
-  Las pruebas del gate de aprobacion automatica por valorizado del cliente.
+    Las pruebas del gate de aprobacion automatica por valorizado del cliente.
 
-  Los 13 casos y el detalle de que cubre cada uno estan en
-  `MO.API.CuentasExtraccion/local_docs/features/wal-640-aprobacion-automatica/09-casos-de-prueba-homo.md`.
+    **Una sola carpeta** para los dos escenarios: cada caso trae en la llave `{` del body un
+    comentario con el resultado esperado **con y sin gate**, p.ej.
+    `{ // Con Gate: Acepta - Sin Gate: Pendiente`. Se compara a ojo contra el estado que quede.
 
-  ## Antes de correr
+    Los casos y el detalle de que cubre cada uno estan en
+    `MO.API.CuentasExtraccion/local_docs/features/wal-640-aprobacion-automatica/09-casos-de-prueba-homo.md`.
 
-  1. El flag `AutomaticApprovalByPortfolio.Enabled` tiene que estar en `true` en el
-     `appsettings` del ambiente contra el que se corre.
-  2. El client `C-CEX` del servicio necesita los scopes `MS-TEN` y `MS-OS` en el identity,
-     y el `ApiIdentityServerConfigProxy.Scopes` del `appsettings` tiene que incluirlos.
-     **Cargar los scopes en el identity primero y recien despues deployar**: los cuatro
-     clients salientes comparten un unico token, asi que si el identity rechaza los scopes
-     nuevos se caen tambien las llamadas a BIND/SUPV.
-  3. Correr el **CLEAN** si se van a repetir altas.
+    ## Antes de correr
 
-  ## Orden sugerido
+    1. No hay flag: el gate esta prendido cuando estan configuradas las URLs
+       `ApiServicesUrl.TenenciasApi` y `ApiServicesUrl.OperatoriaSimpleApi` en el `appsettings`
+       del ambiente. Si estan vacias, el valorizado no se puede obtener y toda cuenta cae en
+       estado 6 (= comportamiento WAL-820). En HOMOLOGACION ya estan cargadas.
+    2. El client `C-CEX` del servicio necesita los scopes `MS-TEN` y `MS-OS` en el identity,
+       y el `ApiIdentityServerConfigProxy.Scopes` del `appsettings` tiene que incluirlos.
+       **Cargar los scopes en el identity primero y recien despues deployar**: los cuatro
+       clients salientes comparten un unico token, asi que si el identity rechaza los scopes
+       nuevos se caen tambien las llamadas a BIND/SUPV.
+    3. Correr el **CLEAN** si se van a repetir altas.
 
-  | Request | Para que |
-  |---|---|
-  | `01 - Correr los 13 casos` | La corrida completa, con tabla de resultados |
-  | `02 - Valorizado de un cliente` | Ver el calculo leg por leg de un cliente puntual |
-  | `03 - Estado de las cuentas de prueba` | Foto del estado de las 13 cuentas, antes o despues |
+    ## Orden
+
+    | Request | Para que |
+    |---|---|
+    | `00 - Estado de las cuentas de prueba` | Foto de las 7 cuentas sin tocar nada. Correr **antes**, para tener el punto de partida |
+    | `01` a `07` | **Un request por caso.** Cada uno da de alta su cuenta, relee el estado persistido y dice OK o FALLA. Se pueden correr sueltos |
+    | `98 - Valorizado de un cliente` | Replica el calculo leg por leg de un cliente puntual, para entender un caso de umbral |
+    | `99 - Correr los casos (todos juntos)` | La corrida completa, con tabla comparativa. Es un atajo: no agrega cobertura sobre los individuales |
+
+    Cada request es autonomo: tiene su cliente, su CBU y su estado esperado
+    hardcodeados, y una asercion propia. La doc de cada uno explica que cubre y con que valorizado.
+
+    ## Prueban el ALTA, no la reconsulta
+
+    Cada caso hace **`POST AltaCuentaExtraccion`**, que es el flujo que el ticket quiere cambiar: el
+    cliente da de alta una cuenta y el gate decide si se le aprueba sola. Es el endpoint **sin 2FA**,
+    el que usa corenet.
+
+    Eso ademas cubre una parte que la reconsulta se saltea: el estado inicial que asigna
+    `CrearCuentaExtraccion` **antes** de llamar a BIND (`0` si la entidad es comun, `6` si esta en la
+    lista de aprobacion manual).
+
+    ## Son repetibles solos
+
+    Cada caso, en su `before-request`, se da de baja a si mismo si la cuenta esta en un estado que
+    bloquea el re-registro (`0`, `1` o `6`). Asi se pueden correr las veces que haga falta **sin pasar
+    por el CLEAN**.
+
+    Y no acumulan filas: `scl_iutcl_Cuenta_Retiro` matchea por `(id_cliente, CBU, moneda, numecuen)` y
+    hace UPDATE si ya existe, asi que se reusa el mismo `ID_Cuenta`. El ciclo completo es:
+
+    ```
+    baja (estado -> 4)  ->  alta (upsert, estado -> 0 o 6)  ->  BIND  ->  gate  ->  estado final
+    ```
+
+    ## Si un caso falla
+
+    Antes de culpar al gate, mirar el detalle que imprime el request:
+
+    - Si dice que **BIND/SUPV no resolvio el CBU**, el gate ni siquiera se ejercito: el alta pasa
+      `rechazarSiFalla: false` y cae en `ErrorValidacionBind`, dejando la cuenta con el estado que le
+      puso el insert.
+    - Si es un caso de umbral, correr `98 - Valorizado de un cliente` con ese `idCliente`: los saldos y
+      el portafolio se mueven, y el cliente puede haber cruzado el millon desde que se armo la matriz
+      (2026-08-20, MEP 1.535,09).
+  type: text/markdown

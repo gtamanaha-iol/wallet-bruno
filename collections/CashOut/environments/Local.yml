@@ -1,28 +1,23 @@
 name: Local
 variables:
-  # HTTP a proposito. Levantar la API SOLO en HTTP (ver folder.yml de WAL-846):
-  #   dotnet run --urls "http://localhost:5002"
-  # Sin endpoint HTTPS, UseHttpsRedirection no puede resolver el puerto destino y
-  # deja pasar el HTTP. Asi no hay certificado en juego: el axios de los scripts
-  # de WAL-846 no puede aceptar el self-signed de ninguna forma (ver folder.yml).
   - name: baseUrl
     value: http://localhost:5002
-  # WAL-846: los casos apuntan a una instancia fija cada uno, sin depender de
-  # que environment este seleccionado.
+    description: ""
   - name: baseUrlLocal
     value: http://localhost:5002
+    description: ""
   - name: baseUrlHomo
     value: https://cashout-api.app.homo.invertironline.com
-  # Identity de HOMOLOGACION a proposito: el client de pruebas vive ahi, igual
-  # que en la coleccion CashIn. Levantar la API con ASPNETCORE_ENVIRONMENT=HOMOLOGACION.
+    description: ""
   - name: identityUrl
-    value: https://identity-server-homologacion.invertironline.com
+    value: https://identity-server-sts.homo.invertironline.com
+    description: ""
   - name: clientId
-    value: MS-CASHOUT
-  # Completar. Si el client MS-CASHOUT no esta a mano, se puede usar el client
-  # de pruebas GT-TEST (el mismo de la coleccion CashIn), siempre que tenga
-  # habilitado el scope MS-CASHOUT en el identity de homologacion.
+    value: C-CASHOUT-LISTENER-KAFKA
+    description: ""
   - name: clientSecret
-    value: ""
+    value: 8d16cecb-4e60-04c6-5468-d2920bcf93c7
+    description: ""
   - name: scope
     value: MS-CASHOUT
+    description: ""

@@ -1,0 +1,55 @@
+info:
+  name: "2 - Texto sin CUIT (400 documento invalido)"
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1.0/Fondos/DepositarMovimientoRecaudadora"
+  auth: inherit
+  body:
+    type: json
+    data: |-
+      {
+        "Dni": "",
+        "Comprobante": "WAL973-R{{runId}}-SINCUIT-{{$timestamp}}",
+        "Importe": {{importe_sinCuit}},
+        "Referencia": "",
+        "InformacionAdicional": "Datos Adicionales:{TRANSFERENCIA SIN IDENTIFICAR;;};",
+        "IdRecaudadora": 1,
+        "Pais": 54,
+        "TipoCuenta": 1,
+        "Moneda": 1,
+        "TipoDepositoFondo": 3,
+        "TipoMovimiento": 1,
+        "EstadoOperacion": 1,
+        "FechaMovimiento": "{{$isoTimestamp}}",
+        "FechaTransferencia": "{{$isoTimestamp}}",
+        "ConceptoOperacion": "Credito por Transferencia",
+        "NombreOrdenante": "TEST WAL973",
+        "CuentaBancariaDestino": { "CBU": "0270100010036331160017" },
+        "CuentaBancariaOrigen": { "CBU": "0170099900000000000017" }
+      }
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "400"
+    - expression: res.body.responseType
+      operator: eq
+      value: "invalidRequest"
+    - expression: res.body.message
+      operator: contains
+      value: "documento del ordenante"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  Es el 40% de los depositos sin dato: el texto no trae ningun CUIT. La regex no extrae nada y
+  la tabla de Postgres tampoco tiene ese texto. Esperado: 400 y queda pendiente de gestion
+  manual en el webtool, igual que hoy. Metrica: dni_source="none".

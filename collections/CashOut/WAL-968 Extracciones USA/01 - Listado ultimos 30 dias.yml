@@ -1,0 +1,83 @@
+info:
+  name: 01 - Listado ultimos 30 dias
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api/v1/usa-withdrawals?from={{usaFrom}}&to={{usaTo}}&page=1&pageSize=20&status=fundsHeld&status=settled&status=dispatched&status=cancelled"
+  params:
+    - name: from
+      value: "{{usaFrom}}"
+      type: query
+    - name: to
+      value: "{{usaTo}}"
+      type: query
+    - name: page
+      value: "1"
+      type: query
+    - name: pageSize
+      value: "20"
+      type: query
+    - name: status
+      value: fundsHeld
+      type: query
+    - name: status
+      value: settled
+      type: query
+    - name: status
+      value: dispatched
+      type: query
+    - name: status
+      value: cancelled
+      type: query
+
+runtime:
+  variables:
+    - name: usaFrom
+      value: 2026-09-30
+    - name: usaTo
+      value: 2026-09-30
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  # 01 — Listado de los últimos 30 días
+
+  Es la vista por defecto de la pantalla: sin filtro de cliente ni de estado, más nuevas primero.
+
+  Por detrás corren **dos consultas**: `GetAsync` (la página, con `OFFSET/FETCH`) y
+  `GetStatusSummaryAsync` (conteos por estado). El `total` sale de la segunda.
+
+  ## Esperado
+
+  - HTTP 200.
+  - `items` con las extracciones USA del período, ordenadas por fecha de solicitud descendente.
+  - `total` = cantidad de extracciones en el rango.
+  - Deja el primer `id` en `usaWithdrawalId`.
+
+  ## Verificación por SQL (homo)
+
+  ```sql
+  SELECT COUNT(*)
+    FROM Tcl_Cuenta_Movim_Extraccion_USA u
+    JOIN tcl_cuenta_movim m ON m.ID_Cuenta_Movim = u.ID_Cuenta_Movim
+   WHERE m.ID_Tipo_Transaccion = 4 AND m.ID_Tipo_Cuenta = 3
+     AND m.FechMovi >= DATEADD(day, -30, CAST(GETDATE() AS date));
+  ```
+
+  ## Ojo
+
+  La respuesta trae `statusSummary` (initiated, inTransit, confirmed, cancelled, total) con los
+  conteos del mismo cliente y rango, sin aplicar el filtro de estado. `UsaWithdrawalResponse`
+  todavía no expone los campos nuevos del DTO (CC, nombre, email, monto, fechas): eso es del
+  ticket del service.

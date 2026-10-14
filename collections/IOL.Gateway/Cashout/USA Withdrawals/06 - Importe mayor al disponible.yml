@@ -1,0 +1,48 @@
+info:
+  name: 06 - Importe mayor al disponible
+  type: http
+  seq: 7
+
+http:
+  method: POST
+  url: "{{baseUrl}}/withdrawals/usa"
+  headers:
+    - name: Content-Type
+      value: application/json
+    - name: Idempotency-Key
+      value: "{{usaIdempotencyKeyTmp}}"
+  body:
+    type: json
+    data: |-
+      {
+        "amount": 999999999,
+        "bankAccountId": {{usaBankAccountId}}
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |-
+        bru.setVar('usaIdempotencyKeyTmp', `usa-saldo-${Date.now()}`);
+    - type: after-response
+      code: |-
+        console.log(`[Saldo] ${res.status} — ${(res.body && res.body.detail) || JSON.stringify(res.body)}`);
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "422"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  Importe absurdo contra una cuenta destino valida.
+
+  Espera **422** — `"The amount exceeds the available balance."`. Valida que el chequeo de
+  disponible contra Tenencia corra antes de crear la extraccion.
+
+  No retiene fondos: el rechazo es previo a la transaccion.

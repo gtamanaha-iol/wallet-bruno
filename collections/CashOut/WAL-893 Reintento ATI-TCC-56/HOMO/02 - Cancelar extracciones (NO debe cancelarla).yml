@@ -1,0 +1,52 @@
+info:
+  name: 02 - Cancelar extracciones (NO debe cancelarla)
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{baseUrlHomo}}/api/v1/ReConsulta/CancelarExtracciones"
+  headers:
+    - name: Content-Type
+      value: application/json
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  # 02 — El job de cancelación
+
+  Es el mismo endpoint que llama el WakeupManager cada 2 minutos. Sin auth:
+  `ReConsultaController` no tiene `[Authorize]`.
+
+  **Correrlo con el movimiento ya sembrado en estado 6.**
+
+  ## Esperado
+
+  El movimiento **sigue en estado 6**. La respuesta del endpoint es siempre 200
+  —no dice a quién canceló—, así que la validación es por SQL:
+
+  ```sql
+  SELECT ID_Cuenta_Movim, ID_Extraccion_Estado, LEFT(Observacion, 60) AS obs
+  FROM dbo.Tcl_Movimiento_Extraccion_Bind WITH (NOLOCK)
+  WHERE ID_Cuenta_Movim = <idCuentaMovim>;
+  ```
+
+  | Resultado | Significa |
+  |---|---|
+  | estado **6**, observación intacta | ✅ la exclusión funciona |
+  | estado 5 + `"Cancelado por CashOut API"` | ❌ la exclusión no aplicó — revisar que homo tenga la rama, no `main` |
+
+  ## Contra-caso
+
+  Con la observación de `ATI-CTI-56` este mismo request **tiene que** dejarlo en
+  estado 5. Si no, el filtro quedó demasiado ancho.

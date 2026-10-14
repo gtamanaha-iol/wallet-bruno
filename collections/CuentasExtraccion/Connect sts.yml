@@ -1,0 +1,31 @@
+info:
+  name: Connect sts
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: https://identity-server-sts.homo.invertironline.com/connect/token
+  body:
+    type: multipart-form
+    data:
+      - name: client_id
+        type: text
+        value: C-CEX
+      - name: client_secret
+        type: text
+        value: 054XPD63-N1R3-QZ6B-CUEX-8T09034BM9Y1
+      - name: scope
+        type: text
+        value: PR-BIND
+      - name: grant_type
+        type: text
+        value: client_credentials
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true

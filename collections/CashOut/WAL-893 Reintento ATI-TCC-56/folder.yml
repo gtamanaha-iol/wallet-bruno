@@ -1,0 +1,35 @@
+info:
+  name: WAL-893 Reintento ATI-TCC-56
+  seq: 3
+
+docs: |
+  # WAL-893 — Reintento automático de extracciones SUPV con ATI-TCC-56
+
+  Una extracción por Supervielle que falla con `ATI-TCC-56` hoy se cancela a los
+  2 minutos. El cambio hace que el bot de reconsulta la reintente hasta 5 veces
+  y, si ninguno prende, la cancele liberando el saldo.
+
+  ## Antes de empezar
+
+  1. **La rama tiene que estar deployada en homo.** Con `main` estos requests
+     prueban el código viejo y no dicen nada.
+  2. **La fila de configuración tiene que estar cargada** en
+     `tco_Observaciones_Estados_Bind` — ver `sql/01-homo-config-y-siembra.sql`.
+
+  ## Orden
+
+  | # | Request | Qué valida |
+  |---|---|---|
+  | 01 | Extraer | genera un movimiento real con saldo comprometido. Anotar el `idCuentaMovim` |
+  | — | *(SQL)* | llevar ese movimiento a estado 6 con la observación de ATI-TCC-56 |
+  | 02 | Cancelar extracciones | **sigue en estado 6** — la exclusión funciona |
+  | 03 | Reconsultar extracciones | lo levanta, consulta al banco y reenvía |
+  | 03 | *(repetir 6 veces)* | a la sexta cancela y libera el saldo |
+
+  Entre cada corrida de 03 hay que esperar **3 minutos**: el bot exige ese lapso
+  desde `FechaUltimaActualizacion`.
+
+  ## Contra-caso
+
+  Repetir todo con la observación de `ATI-CTI-56` (difiere en 9 caracteres): el
+  paso 02 tiene que cancelarla, no excluirla.

@@ -1,11 +1,11 @@
 info:
-  name: "GET /api/v1/international-bank-account/:id - 200 OK"
+  name: "GET /api/v1/international-bank-accounts/:id - 200 OK"
   type: http
   seq: 1
 
 http:
   method: GET
-  url: "{{baseUrl}}/api/v1/international-bank-account/{{bankAccountId}}"
+  url: "{{baseUrl}}/api/v1/international-bank-accounts/{{bankAccountId}}"
   auth: none
 
 assert:

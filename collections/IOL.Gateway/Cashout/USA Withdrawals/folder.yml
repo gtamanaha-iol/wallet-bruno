@@ -1,0 +1,123 @@
+info:
+  name: USA Withdrawals
+  type: folder
+  seq: 2
+
+request:
+  auth: inherit
+
+docs: |
+  # USA Withdrawals
+
+  **TLDR**
+
+  - Dos endpoints: `POST withdrawals/usa` crea la extraccion desde la cuenta USA del cliente del
+    token hacia una cuenta bancaria del exterior propia, y `POST withdrawals/usa/{id}/cancel` la
+    cancela mientras siga en FundsHeld.
+  - El cliente **no va en el body**: sale del claim `ID` del token. El body son 2 campos.
+  - `Idempotency-Key` es **obligatorio**. Reintentar con la misma key y el mismo body devuelve
+    la misma extraccion (201, mismo `id`), no una nueva.
+  - Environments: **Homo - USA (PF)** y **Local - USA (PF)**, los dos con el cliente 537401.
+  - Correr **en orden**: el `00` valida los fixtures y el `01` deja el `id` y la key que usan
+    el `02` y el `03`. Del `04` al `09` son independientes.
+  - **Crea extracciones reales** y retiene fondos. El `10` cancela la del `01` y libera los fondos
+    — ver "Limpieza".
+
+  ## Contrato
+
+  `POST {{baseUrl}}/withdrawals/usa`
+
+  | | |
+  |---|---|
+  | Auth | Bearer del cliente (lo pone el `before-request` de la coleccion) |
+  | Header | `Idempotency-Key` — requerido, maximo 100 caracteres |
+  | Body | `{ "amount": <decimal > 0>, "bankAccountId": <int> }` |
+  | 201 | `{ "id": <int> }` — id de la extraccion |
+
+  ### Respuestas de error (`ProblemDetails`)
+
+  | Status | Cuando |
+  |---|---|
+  | 400 | Falta `Idempotency-Key`, o `amount` <= 0, o `bankAccountId` ausente |
+  | 401 | Sin token o token invalido |
+  | 403 | El caller no puede operar por ese cliente |
+  | 409 | Key ya usada por **otro** cliente, u otra extraccion USA en curso para el cliente |
+  | 422 | Cuenta destino inexistente / de otro cliente / no habilitada; cliente sin cuenta USA o bloqueada; `amount` mayor al disponible; misma key con **otro** body |
+  | 503 | Dependencia de CashOut no disponible |
+
+  El Gateway es un pasamanos a `CashOut POST api/v1/usa-withdrawals`, agregando los headers
+  `X-IOL-Client-Id` (cliente del token) y `X-Client-Id` (client del Identity Server).
+  Los status de CashOut se reenvian tal cual
+  (`HttpResponseMessageExtension.StatusCodeHandler` -> `AddProblemDetailConfig`).
+
+  ## Casos
+
+  | # | Caso | Espera |
+  |---|---|---|
+  | 00 | Cuentas del exterior — valida los fixtures | 200 |
+  | 01 | Extraccion USA | 201 + `id` |
+  | 02 | Idempotencia, misma key y mismo body | 201, **mismo** `id` |
+  | 03 | Idempotencia, misma key y otro importe | 422 |
+  | 04 | Sin `Idempotency-Key` | 400 |
+  | 05 | Importe cero | 400 |
+  | 06 | Importe mayor al disponible | 422 |
+  | 07 | Cuenta destino `PendingVerification` | 422 |
+  | 08 | Cuenta destino de otro cliente | 422, mensaje de "no encontrada" |
+  | 09 | Cuenta destino inexistente | 422, **mismo** mensaje que el 08 |
+  | 10 | Cancelar la extraccion del `01` | 204 |
+  | 11 | Cancelar de nuevo la misma | 409 |
+  | 12 | Cancelar un id inexistente | 404 |
+
+  ### Cancelacion
+
+  `POST {{baseUrl}}/withdrawals/usa/{id}/cancel` — sin body (el cliente no indica motivo).
+
+  | Status | Cuando |
+  |---|---|
+  | 204 | Cancelada: pasa a Cancelled y libera los fondos |
+  | 404 | No existe o es de **otro** cliente (mismo mensaje) |
+  | 409 | Ya no esta en FundsHeld: En proceso, Confirmada o Cancelada |
+
+  El Gateway la reenvia a `CashOut PATCH api/v1/usa-withdrawals/{id}/status` con
+  `newStatus: cancelled`, `X-Client-Id` y `X-IOL-Client-Id` (cliente del token).
+
+  ## Fixtures de homologacion
+
+  Cliente **537401**, USD **29.539** disponibles.
+
+  | Variable | Id | Estado |
+  |---|---|---|
+  | `usaBankAccountId` | 71 | `Accepted` |
+  | `usaBankAccountIdPending` | 81 | `PendingVerification` |
+  | `usaBankAccountIdRejected` | 80 | `Rejected` |
+  | `usaBankAccountIdOtherClient` | 69 | de otro cliente (1201309) |
+
+  El request `00` verifica estos estados antes de que corra el resto: si alguien aprueba la 81
+  o da de baja la 71, falla ahi con el detalle por consola en vez de dejar que fallen los de
+  abajo sin explicacion.
+
+  ### Sin cubrir: cliente con ATO
+
+  El cliente **436286** esta restringido por ATO y tiene la cuenta **82**. CashOut crea la
+  extraccion y la cancela sola (*"Extracción cancelada automáticamente por reglas de seguridad
+  (ATO)"*), asi que el POST responde **201** igual y la diferencia solo se ve en el estado
+  final. Como el Gateway no expone el GET de extracciones USA, desde aca no se puede verificar:
+  queda pendiente, y necesita su propio environment porque hay que loguearse como 436286.
+
+  ## Limpieza
+
+  El request `01` deja una extraccion real en **FundsHeld** con fondos retenidos (el `02` no suma
+  otra: devuelve la misma). El `10` la cancela y libera los fondos, asi que una corrida completa
+  del `00` al `12` no deja nada retenido.
+
+  Del `03` al `09` no retienen nada: todos son rechazos previos a la transaccion.
+
+  ## Variables de environment
+
+  | Variable | Que es |
+  |---|---|
+  | `clientId` | Cliente de prueba. El usuario se deriva como `registro_<clientId>` |
+  | `usaWithdrawalAmount` | Importe en USD de los casos felices |
+  | `usaBankAccountId` y las 3 variantes | Ver "Fixtures" |
+  | `usaIdempotencyKey` | Key del `01`, reusada por el `02` y el `03`. La genera el `01` |
+  | `usaWithdrawalId` | Id devuelto por el `01`, comparado por el `02` y cancelado por el `10` y el `11` |

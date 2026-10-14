@@ -15,7 +15,12 @@ request:
         const pathStart = rawUrl.indexOf('/', rawUrl.indexOf('//') + 2);
         const requestPath = pathStart !== -1 ? rawUrl.slice(pathStart) : '/';
         let bodyStr = '';
-        try { if (req.body && typeof req.body === 'object') { bodyStr = JSON.stringify(req.body, null, 2); } } catch(e) {}
+        const rawBody = req.getBody();
+        if (rawBody !== undefined && rawBody !== null && rawBody !== '') {
+          const parsed = typeof rawBody === 'string' ? JSON.parse(rawBody.replace(/^\s*\/\/.*$/gm, '').replace(/\s\/\/[^"\n]*$/gm, '')) : rawBody;
+          bodyStr = JSON.stringify(parsed);
+          req.setBody(bodyStr);
+        }
         const bodyHashHex = CryptoJS.SHA256(bodyStr).toString(CryptoJS.enc.Hex);
         const hmacMessage = method + requestPath + bodyHashHex + timestamp;
         const signature = CryptoJS.HmacSHA256(hmacMessage, secret).toString(CryptoJS.enc.Base64);

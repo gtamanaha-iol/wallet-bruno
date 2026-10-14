@@ -1,0 +1,92 @@
+info:
+  name: WAL-968 Extracciones USA
+  type: folder
+  seq: 4
+
+request:
+  scripts:
+    - type: before-request
+      code: |-
+        // 1) Token client_credentials (scope MS-CASHOUT). Obligatorio:
+        //    UsaWithdrawalsController tiene [Authorize], sin token responde 401.
+        const identityUrl  = bru.getEnvVar('identityUrl');
+        const clientId     = bru.getEnvVar('clientId');
+        const clientSecret = bru.getEnvVar('clientSecret');
+        const scope        = bru.getEnvVar('scope');
+
+        if (!clientSecret) {
+          throw new Error('[Auth] falta clientSecret en el environment: /usa-withdrawals exige token.');
+        }
+
+        const axios = require('axios');
+        const tokenBody = 'grant_type=client_credentials'
+                        + '&client_id=' + encodeURIComponent(clientId)
+                        + '&client_secret=' + encodeURIComponent(clientSecret)
+                        + '&scope=' + encodeURIComponent(scope);
+
+        let tokenRes;
+        try {
+          tokenRes = await axios.post(identityUrl + '/connect/token', tokenBody, {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+          });
+        } catch (e) {
+          const detalle = e.response ? e.response.status + ' ' + JSON.stringify(e.response.data) : e.message;
+          throw new Error('[Auth] fallo el token contra ' + identityUrl + ' con client ' + clientId + ': ' + detalle);
+        }
+        req.setHeader('Authorization', 'Bearer ' + tokenRes.data.access_token);
+
+        // 2) Rango por defecto: ultimos 30 dias (como las tarjetas de la pantalla).
+        //    `to` es inclusivo en la API: el mapper hace To.Date + 1 dia.
+        const pad = n => String(n).padStart(2, '0');
+        const fmt = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+        const today = new Date();
+        const from = new Date(today); from.setDate(today.getDate() - 30);
+        bru.setVar('usaFrom', fmt(from));
+        bru.setVar('usaTo', fmt(today));
+
+docs:
+  content: |
+    # WAL-968 — Extracciones USA (capa de datos)
+
+    Requests contra `api/v1/usa-withdrawals` (controller de WAL-922) para probar la capa
+    de datos de WAL-968 en **LOCAL** y **HOMO**. Se elige con el environment:
+
+    | Environment | `baseUrl` | Qué hace falta |
+    |---|---|---|
+    | **Local** | `http://localhost:5002` | Levantar el branch `feature/WAL-968-usa-withdrawals-data-layer` con el perfil HTTP-only (ver carpeta WAL-846 / LOCAL). Apunta a la base de homo |
+    | **Homologacion** | servicio desplegado | Que el branch WAL-968 esté **deployado** en homo. Con `main` o WAL-922 solo, el repositorio tira `NotImplementedException` |
+
+    ## Auth
+
+    El controller tiene `[Authorize]`, así que el script de la carpeta **pide token siempre**
+    (client_credentials, scope `MS-CASHOUT`) y falla si no hay `clientSecret`.
+    En el environment **Local**, completar `identityUrl`, `clientId` y `clientSecret` con los
+    mismos valores que **Homologacion**: la API local valida contra el STS de homo.
+
+    ## Qué se puede probar hoy
+
+    | # | Request | Estado |
+    |---|---|---|
+    | 01–04 | Listados (`GET`) | ✅ Funcionan: `GetAsync` + `GetStatusSummaryAsync` están implementados |
+    | 05–08 | Alta y cambios de estado (`POST` / `PATCH`) | ⏳ **Todavía no**: el service de WAL-922 llama a `CreateAsync` / `UpdateStatusAsync`, que siguen en `NotImplementedException` hasta el ticket del service. Responden **500** |
+
+    Los métodos nuevos del repositorio (`CreateWithdrawalAsync`, `MarkInTransitAsync`,
+    `ConfirmWithdrawalAsync`, `CancelWithdrawalAsync`) no están expuestos por la API. Para
+    tener datos en los listados, generarlos con los scripts SQL de WAL-905:
+
+    `CashOut/local_docs/features/WAL-905 -  Extracciones cuenta USA/relevamiento/comprometer-saldo/extraccion-tabla-usa/`
+
+    ## Antes de empezar (homo)
+
+    1. `relevamiento/tabla-extracciones-usa/ddl-tcl-cuenta-movim-extraccion-usa.sql` corrido.
+    2. `grants-usr-cashout.sql` corrido: sin `EXECUTE` sobre `fDesencripta_Dato` el listado falla.
+    3. Datos: al menos una extracción USA generada con los scripts (cliente de prueba **887257**).
+
+    ## Variables
+
+    - `usaFrom` / `usaTo`: las setea el script de la carpeta (últimos 30 días).
+    - Cliente de prueba: **887257** (CC 212714), fijo en los requests.
+    - `usaWithdrawalId`: lo deja el 01 con el primer id del listado, para los `PATCH`.
+
+    Los movimientos son **reales** en la base de homo (la API local también apunta ahí).
+  type: text/markdown

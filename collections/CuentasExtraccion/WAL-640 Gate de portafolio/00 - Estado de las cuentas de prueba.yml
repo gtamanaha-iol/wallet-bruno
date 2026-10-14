@@ -1,7 +1,7 @@
 info:
-  name: 03 - Estado de las cuentas de prueba
+  name: 00 - Estado de las cuentas de prueba
   type: http
-  seq: 3
+  seq: 1
 
 http:
   method: GET
@@ -11,9 +11,14 @@ runtime:
   scripts:
     - type: after-response
       code: |-
-        // Foto de las 13 cuentas de la matriz, sin tocar nada. Sirve para ver el punto de
+        // Foto de las cuentas de la matriz, sin tocar nada. Sirve para ver el punto de
         // partida antes de correr los casos, y para comparar despues.
         const axios = require('axios');
+
+        const ESTADO_NUM = { pendienteDeVerificacion:0, aceptada:1, rechazada:2, baja_Pendiente:3, baja:4, suspendida:5, pendienteDeAprobacionManual:6 };
+        const MONEDA_NUM = { pesosArgentinos:1, dolaresUsa:2 };
+        const estadoNum = e => typeof e === 'number' ? e : (ESTADO_NUM[e] ?? e);
+        const monedaNum = m => typeof m === 'number' ? m : (MONEDA_NUM[m] ?? m);
 
         const baseUrl = bru.getEnvVar('baseUrl');
         const token   = bru.getVar('accessToken');
@@ -25,19 +30,13 @@ runtime:
         };
 
         const CUENTAS = [
-          { n: 1,  idCuenta: 614068,   idCliente: 505258,  entidad: 'Galicia' },
-          { n: 2,  idCuenta: 613911,   idCliente: 1195589, entidad: 'ICBC' },
-          { n: 3,  idCuenta: 613964,   idCliente: 1035817, entidad: 'ICBC' },
-          { n: 4,  idCuenta: 612400,   idCliente: 1189924, entidad: 'Wilobank' },
-          { n: 5,  idCuenta: 611661,   idCliente: 104310,  entidad: 'Wilobank' },
-          { n: 6,  idCuenta: 613989,   idCliente: 617764,  entidad: 'ICBC' },
-          { n: 7,  idCuenta: 61464121, idCliente: 1201112, entidad: 'ICBC' },
-          { n: 8,  idCuenta: 614599,   idCliente: 1197453, entidad: 'ICBC' },
-          { n: 9,  idCuenta: 613910,   idCliente: 1195589, entidad: 'ICBC' },
-          { n: 10, idCuenta: 613209,   idCliente: 1193358, entidad: 'PPay' },
-          { n: 11, idCuenta: 396427,   idCliente: 979714,  entidad: 'Uala' },
-          { n: 12, idCuenta: 384774,   idCliente: 949925,  entidad: 'MercadoLibre' },
-          { n: 13, idCuenta: 61464104, idCliente: 1201113, entidad: 'Ripio' }
+          { n: 1,  cbu: '0170340340000078881237', idCliente: 436286, entidad: 'BBVA' },  // cc: 123885
+          { n: 2,  cbu: '0150501601000271781096', idCliente: 401243, entidad: 'ICBC' },  // cc: 158064
+          { n: 3,  cbu: '0150889301000001071284', idCliente: 480262, entidad: 'ICBC' },  // cc: 28001
+          { n: 4,  cbu: '0150519101000132838170', idCliente: 651752, entidad: 'ICBC' },  // cc: 68029
+          { n: 5,  cbu: '0150902501000119142300', idCliente: 374630, entidad: 'ICBC' },  // cc: sin comitente en homo
+          { n: 6,  cbu: '0150501601000022224744', idCliente: 536515, entidad: 'ICBC' },  // cc: 36261
+          { n: 7,  cbu: '0000532609100002749314', idCliente: 715842, entidad: 'Ripio' }  // cc: sin comitente en homo
         ];
 
         // Una sola llamada por cliente, aunque tenga varias cuentas en la matriz.
@@ -57,10 +56,10 @@ runtime:
           }
         }
 
-        console.log(`Estado de las 13 cuentas de prueba | ${baseUrl}`);
+        console.log(`Estado de las ${CUENTAS.length} cuentas de prueba | ${baseUrl}`);
         console.log('');
-        console.log('  #  | entidad        | cuenta     | cliente   | estado');
-        console.log('-----+----------------+------------+-----------+---------------');
+        console.log('  #  | entidad        | cbu                      | cliente   | estado');
+        console.log('-----+----------------+--------------------------+-----------+---------------');
 
         for (const c of CUENTAS) {
           const cuentas = porCliente.get(c.idCliente);
@@ -69,7 +68,7 @@ runtime:
           if (cuentas === 'ERROR') {
             estado = 'ERROR al listar';
           } else {
-            const found = cuentas.find(x => x.idCuenta === c.idCuenta);
+            const found = cuentas.find(x => x.numeroCbu === c.cbu);
             estado = found
               ? `${ESTADOS[found.estadoCuentaBancaria] ?? found.estadoCuentaBancaria}(${found.estadoCuentaBancaria})`
               : 'NO ESTA';
@@ -77,7 +76,7 @@ runtime:
 
           console.log(
             ` ${String(c.n).padStart(2)}  | ${c.entidad.padEnd(14)} | ` +
-            `${String(c.idCuenta).padEnd(10)} | ${String(c.idCliente).padEnd(9)} | ${estado}`);
+            `${c.cbu.padEnd(24)} | ${String(c.idCliente).padEnd(9)} | ${estado}`);
         }
 
         console.log('');
@@ -94,12 +93,9 @@ settings:
 docs: |
   # Estado de las cuentas de prueba
 
-  Foto de las 13 cuentas de la matriz de WAL-640, sin modificar nada. Conviene correrlo
-  **antes** de `01 - Correr los 13 casos` para tener el punto de partida, y despues para
-  comparar.
-
-  Agrupa por cliente, asi que hace una sola llamada por cliente aunque la matriz tenga dos
-  cuentas del mismo (los casos 2 y 9 comparten el cliente `1195589`).
+  Foto de las 7 cuentas de la matriz de WAL-640, sin modificar nada. Conviene correrlo
+  **antes** de `99 - Correr los casos` para tener el punto de partida, y despues para
+  comparar. Matchea por `numeroCbu` (el `idCuenta` lo asigna el alta).
 
   Ojo con `NO ESTA`: ademas de una baja, puede ser el filtro de
   `CuentaExtraccionRepository.ObtenerCuentasExtraccion`, que descarta en silencio las filas

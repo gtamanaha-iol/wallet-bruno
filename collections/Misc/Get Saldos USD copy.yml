@@ -1,0 +1,18 @@
+info:
+  name: Get Saldos USD copy
+  type: http
+  seq: 6
+
+http:
+  method: GET
+  url: https://tenencia-clientes-homologacion.invertironline.com/Saldo/887257/Arg_USD/Disponible/t0
+  auth:
+    type: bearer
+    token: eyJhbGciOiJSUzI1NiIsImtpZCI6IjNBNDdDOTFFREE1M0U2MjBENzVFRUQ2RTc5RkRGQjdFIiwidHlwIjoiYXQrand0In0.eyJuYmYiOjE3ODgzNjk0MzIsImV4cCI6MTc4ODM3MzAzMiwiaXNzIjoiaHR0cHM6Ly9pZGVudGl0eS1zZXJ2ZXItaG9tb2xvZ2FjaW9uLmludmVydGlyb25saW5lLmNvbSIsImF1ZCI6WyJNUy1PUyIsIk1TLVRFTiIsIklPTC1QUkVPUkRFUlMiLCJQUi1CSU5EIiwiUFItU1VQViIsIlItVVNFUi1NQU4iXSwiY2xpZW50X2lkIjoiQy1DRVgiLCJpYXQiOjE3ODgzNjk0MzIsInNjb3BlIjpbIk1TLU9TIiwiTVMtVEVOIiwiUFItQklORCIsIlBSLVNVUFYiLCJSLVVTRVItTUFOIl19.AE7Ia9qTujq0IL1ftLEXSvsGREY6NpKkYmi1JXd5aAAgj7h-bBv40evupX916Q24SPTZPUIEIIct-8C5tM5rYTA32YOaZc_HHlSVsfXGFlp-b_bKUS53olEb47Dhq42jlM2_RjAGP_o4IkZv9mklQ6UnAi8JO54sC8STVX1dX9ODFlU8Bh9BbNFgWSNfDL7-8nGFyYIcZR8w_brBQ52p68kIBkGM4tCDSqaecyvDKVcY2wyexJF310z4rXigkuvu2NQip_cKzb_3ObNXAw6iMqpcHlrfpdQE50S_w-mjpM2iR9D2p5YsjNPiPhHH2rvrJ_SXDah88tTdIiNPG3lnyg
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true

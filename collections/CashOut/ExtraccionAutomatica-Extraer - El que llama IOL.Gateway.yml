@@ -1,0 +1,94 @@
+info:
+  name: ExtraccionAutomatica/Extraer - El que llama IOL.Gateway
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/ExtraccionAutomatica/Extraer"
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "idCliente": 392836,
+        "tipoCuenta": 1,
+        "tipoExtraccion": 2,
+        "importe": 1.0,
+        "idCuentaBancariaDelClienteDestino": 71768
+      }
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.body.data.result
+      operator: eq
+      value: "true"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  # ExtraccionAutomatica / Extraer
+
+  Extraccion simple (cashout) en HOMOLOGACION.
+
+  `ExtraccionAutomaticaController` NO tiene `[Authorize]` y no hay FallbackPolicy
+  global, por lo que el endpoint es anonimo: no requiere token.
+
+  Campos (ver `ExtraccionRequest` y enums):
+  - `tipoCuenta`: TipoCuentaPaisMoneda (1 = Inversion_Argentina_Pesos)
+  - `tipoExtraccion`: TipoExtraccion (2 = TRANSFERENCIA_ELECTRONICA)
+  - `importe`: debe ser > 0
+  - `idCuentaBancariaDelClienteDestino`: ID_Cuenta de `tcl_cuenta_retiro`
+
+  ## Cliente de prueba (homo)
+
+  | idCliente | idCuentaBancaria | Banco | CBU | Saldo ARS |
+  |---|---|---|---|---|
+  | 392836 | 71768 | BBVA (17) | 0170309040000032224942 | ~$313.000 M |
+
+  Que tiene que cumplir un cliente para que la extraccion pase las validaciones:
+
+  - producto 58 (ExtraccionAutomatica) en `ttr_cliente_producto`
+  - cuenta de retiro con `ID_Estado_Cuenta = 1` **y** `ID_Moneda = tipoCuenta`
+  - saldo disponible (tenencia) >= importe
+  - sin pausa vigente en `tco_Pausas_Extracciones` para ese banco/moneda/producto
+
+  **No mandar `idCuentaBancariaDelClienteDestino: 0`.** El SP `scl_Cuenta_Bancaria_IOL`
+  devuelve todas las cuentas del cliente ordenadas por estado y el servicio se queda con
+  la primera fila: si el cliente tiene varias aceptadas (algunas en dolares), cual toma es
+  indeterminado y la validacion de moneda falla con 202.
+
+  El cliente anterior de esta request (887257) ya no sirve para pesos: sus cuentas de
+  retiro en ARS quedaron en estado 2 o 4 y la unica aceptada es en dolares (ID_Cuenta
+  518122, sirve con `tipoCuenta: 2`).
+
+  ## Que mirar si falla
+
+  | Respuesta | Significa |
+  |---|---|
+  | 200 + `result: true` | OK, se genero el movimiento (`idCuentaMovim`) |
+  | 202 + "cuenta bancaria no es valida" | La cuenta no esta aceptada o la moneda no coincide con `tipoCuenta` |
+  | 202 + "excede el limite de su Saldo" | Sin saldo disponible en tenencia |
+  | 500 | Error del servicio, mirar los logs en Loki |
+
+  ## Evidencia (2026-09-18, homo)
+
+  ```
+  200 {"data":{"result":true,"resultDescriptions":[],"idCuentaMovim":61232337,
+       "message":"Extracción generada correctamente"},"responseType":"success"}
+  ```
+
+  El movimiento 61232337 quedo en `Tcl_Movimiento_Extraccion_Bind` con
+  `ID_Extraccion_Estado = 1` (PendienteEnvioBind) hacia el CBU 0170309040000032224942.
+
+  Genera **un movimiento real** en la base de homo.

@@ -5,10 +5,11 @@ info:
 
 http:
   method: GET
-  url: "{{tenenciaBaseUrl}}/portfolio/887257/USA"
+  url: "{{tenenciaBaseUrl}}/portfolio/676345/USA"
 
 settings:
   encodeUrl: true
   timeout: 0
   followRedirects: true
   maxRedirects: 5
+  forwardAuthorizationHeader: true

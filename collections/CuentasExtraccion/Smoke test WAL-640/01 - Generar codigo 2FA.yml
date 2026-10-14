@@ -1,0 +1,39 @@
+info:
+  name: 01 - Generar codigo 2FA
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: https://cuentasextraccion-api-homologacion.invertironline.com/api/v1/AltaCuentaExtraccion/GenerateTwoFactorCode
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "iolCustomerId": 537401,
+        "products": 1
+      }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  # Paso 1 — Generar y enviar el codigo 2FA
+
+  `POST api/v1/AltaCuentaExtraccion/GenerateTwoFactorCode`
+
+  Dispara el envio del codigo de segundo factor al cliente 620272 via User Management.
+
+  | Campo | Enum | Valor |
+  |---|---|---|
+  | `iolCustomerId` | | 620272 |
+  | `products` | `Product` | 1 = Alyc, 2 = Hub, 3 = Crypto |
+
+  Cuando llegue el codigo, cargarlo en `02 - Alta cuenta con 2FA`.

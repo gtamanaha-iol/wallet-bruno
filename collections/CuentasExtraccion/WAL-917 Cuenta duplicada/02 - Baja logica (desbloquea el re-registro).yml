@@ -1,0 +1,54 @@
+info:
+  name: 02 - Baja logica (desbloquea el re-registro)
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/BajaCuentaExtraccion/EjecutarBajaCuentaExtraccion"
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "idCliente": 1200862,
+        "idCuenta": {{cuenta1Id}},
+        "idAccion": 4
+      }
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        const mensaje = (res.body && res.body.data && res.body.data.mensaje) || null;
+        if (!mensaje) {
+          throw new Error('La baja no aplico ningun cambio (200 con mensaje null) — revisar cuenta1Id.');
+        }
+        console.log(`Cuenta ${bru.getVar('cuenta1Id')} dada de baja: ${mensaje}`);
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  # 02 — Baja lógica de la cuenta del paso 01
+
+  Manda la cuenta creada en `01` a `Baja (4)`. No es parte del mecanismo del bug — es
+  **preparación de la prueba**: `BuscarCuentaDuplicada` bloquea un re-alta del mismo CBU
+  mientras esté en estado `0`, `1` o `6`, y sin este paso el `03` fallaría con
+  `"El cliente ya tiene asociada la cuenta bancaria"` antes de llegar al SP.
+
+  En producción este paso no existe como tal — lo reemplaza el paso del tiempo: la cuenta
+  cambia de estado por su cuenta (reconsulta, rechazo, etc.) o el usuario reintenta el alta
+  meses después, cuando ya no está en un estado bloqueante.
+
+  Usa la variable `cuenta1Id` que dejó `01` — correr `01` primero.

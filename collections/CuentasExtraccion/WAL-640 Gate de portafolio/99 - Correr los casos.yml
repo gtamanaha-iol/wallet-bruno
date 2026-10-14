@@ -1,0 +1,177 @@
+info:
+  name: 99 - Correr los casos (todos juntos)
+  type: http
+  seq: 10
+
+http:
+  method: GET
+  url: "{{baseUrl}}/healthcheck"
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        // El healthcheck de arriba es solo para que Bruno tenga algo que ejecutar: los
+        // casos salen de este script. Es un atajo de los requests individuales, que hacen
+        // exactamente lo mismo uno por uno y con mejor detalle.
+        const axios = require('axios');
+
+        const ESTADO_NUM = { pendienteDeVerificacion:0, aceptada:1, rechazada:2, baja_Pendiente:3, baja:4, suspendida:5, pendienteDeAprobacionManual:6 };
+        const MONEDA_NUM = { pesosArgentinos:1, dolaresUsa:2 };
+        const estadoNum = e => typeof e === 'number' ? e : (ESTADO_NUM[e] ?? e);
+        const monedaNum = m => typeof m === 'number' ? m : (MONEDA_NUM[m] ?? m);
+
+        const baseUrl = bru.getEnvVar('baseUrl');
+        const headers = {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + bru.getVar('accessToken')
+        };
+
+        const BLOQUEAN = [0, 1, 6];
+        const ESTADOS = {
+          0: 'Pendiente', 1: 'Aceptada', 2: 'Rechazada',
+          3: 'BajaPend', 4: 'Baja', 5: 'Suspendida', 6: 'AprobManual'
+        };
+
+        // Datos verificados contra IOL2 homo el 2026-08-20 (MEP 1535,09). Los saldos se
+        // mueven: si un caso de umbral falla, revalidar con "98 - Valorizado de un cliente"
+        // antes de culpar al gate.
+        const CASOS = [
+          { n: 1,  cli: 436286, cbu: '0170340340000078881237', mon: 1, tipo: 1, ent: 'BBVA',  esp: 1, cubre: 'banco comun -> aprueba SIN consultar valorizado' },  // cc: 123885
+          { n: 2,  cli: 401243, cbu: '0150501601000271781096', mon: 1, tipo: 1, ent: 'ICBC',  esp: 1, cubre: 'ICBC bajo el umbral (~550.953) -> APRUEBA' },  // cc: 158064
+          { n: 3,  cli: 480262, cbu: '0150889301000001071284', mon: 1, tipo: 1, ent: 'ICBC',  esp: 6, cubre: 'ICBC sobre el umbral (~2.623.240) -> pendiente' },  // cc: 28001
+          { n: 4,  cli: 651752, cbu: '0150519101000132838170', mon: 1, tipo: 1, ent: 'ICBC',  esp: 1, cubre: 'valorizado NEGATIVO (~-200.784) -> aprueba (item abierto)' },  // cc: 68029
+          { n: 5,  cli: 374630, cbu: '0150902501000119142300', mon: 1, tipo: 2, ent: 'ICBC',  esp: 1, cubre: 'valorizado CERO, entidad de aprobacion manual -> APRUEBA' },  // cc: sin comitente en homo
+          { n: 6,  cli: 536515, cbu: '0150501601000022224744', mon: 1, tipo: 1, ent: 'ICBC',  esp: 2, cubre: 'la IDENTIDAD manda: CUIT no matchea, valorizado bajo' },  // cc: 36261
+          { n: 7,  cli: 715842, cbu: '0000532609100002749314', mon: 1, tipo: 1, ent: 'Ripio', esp: 2, cubre: 'CVU fuera de la whitelist -> rechaza' }  // cc: sin comitente en homo
+        ];
+
+        const buscar = async (cli, cbu, mon) => {
+          const r = await axios.get(
+            `${baseUrl}/api/v1/CuentasExtraccion/ObtenerCuentasExtraccion/${cli}`, { headers });
+          return ((r.data && r.data.data) || []).find(c => c.numeroCbu === cbu && monedaNum(c.moneda) === mon) || null;
+        };
+
+        console.log(`WAL-640 GATE | ${CASOS.length} casos via ALTA contra ${baseUrl}`);
+        console.log('');
+
+        const filas = [];
+        let ok = 0, fallidos = 0, errores = 0;
+
+        for (const c of CASOS) {
+          let antes = null, despues = null, detalle = '', nota = '';
+
+          try {
+            // Setup: si la cuenta bloquea el re-registro, baja logica a 4.
+            const previa = await buscar(c.cli, c.cbu, c.mon);
+            antes = previa ? estadoNum(previa.estadoCuentaBancaria) : null;
+
+            if (previa && BLOQUEAN.includes(estadoNum(previa.estadoCuentaBancaria))) {
+              await axios.post(
+                `${baseUrl}/api/v1/BajaCuentaExtraccion/EjecutarBajaCuentaExtraccion`,
+                { idCliente: c.cli, idCuenta: previa.idCuenta, idAccion: 4 },
+                { headers });
+            }
+
+            const alta = await axios.post(
+              `${baseUrl}/api/v1/CuentasExtraccion/AltaCuentaExtraccion`,
+              {
+                idCliente: c.cli,
+                moneda: c.mon,
+                tipoIdentificacionCuentaRetiro: 1024,
+                identificadorCuentaRetiro: c.cbu,
+                tipoCuentaBancaria: c.tipo
+              },
+              { headers });
+
+            detalle = ((alta.data && alta.data.data) || {}).detalleResultadoValidacion || '';
+
+            const final = await buscar(c.cli, c.cbu, c.mon);
+            despues = final ? estadoNum(final.estadoCuentaBancaria) : null;
+
+            if (despues !== c.esp && /error|no pudimos|timeout|tecnic/i.test(detalle)) {
+              nota = 'BIND no resolvio: el gate no se ejercito';
+            }
+          } catch (e) {
+            errores++;
+            const msg = e.response ? `${e.response.status} ${JSON.stringify(e.response.data)}` : e.message;
+            filas.push({ n: c.n, ent: c.ent, antes, despues: null, esp: c.esp, res: 'ERR', cubre: c.cubre, nota: msg });
+            continue;
+          }
+
+          const paso = despues === c.esp;
+          paso ? ok++ : fallidos++;
+
+          filas.push({
+            n: c.n, ent: c.ent, antes, despues, esp: c.esp,
+            res: paso ? 'OK' : 'FALLA', cubre: c.cubre,
+            nota: nota || (detalle ? detalle.slice(0, 60) : '')
+          });
+        }
+
+        const est = v => v === null ? '-' : `${ESTADOS[v] ?? v}(${v})`;
+
+        console.log('  #  | entidad        | antes         | despues       | esperado      | res');
+        console.log('-----+----------------+---------------+---------------+---------------+------');
+        for (const f of filas) {
+          console.log(
+            ` ${String(f.n).padStart(2)}  | ${f.ent.padEnd(14)} | ${est(f.antes).padEnd(13)} | ` +
+            `${est(f.despues).padEnd(13)} | ${est(f.esp).padEnd(13)} | ${f.res}`);
+        }
+
+        console.log('');
+        console.log('Detalle por caso:');
+        for (const f of filas) {
+          console.log(` ${String(f.n).padStart(2)}. ${f.cubre}`);
+          if (f.nota) console.log(`     ${f.nota}`);
+        }
+
+        console.log('');
+        console.log(`RESULTADO: ${ok} OK | ${fallidos} FALLA | ${errores} ERROR  (de ${CASOS.length})`);
+
+        bru.setVar('casosOk', ok);
+        bru.setVar('casosFallidos', fallidos + errores);
+  assertions:
+    - expression: bru.getVar("casosFallidos")
+      operator: eq
+      value: "0"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  # Correr los casos, todos juntos
+
+  Atajo de los requests individuales. Hace exactamente lo mismo —setup, alta, verificacion— pero
+  para los 7 seguidos, y arma una tabla con el estado **antes**, **despues** y el **esperado**.
+
+  No agrega cobertura sobre los individuales: si algo falla, conviene abrir el request del caso
+  puntual, que imprime mas contexto y tiene su propia documentacion.
+
+  El detalle de que cubre cada caso, con el valorizado de cada cliente desglosado leg por leg, esta
+  en `MO.API.CuentasExtraccion/local_docs/features/wal-640-aprobacion-automatica/09-casos-de-prueba-homo.md`.
+
+  ## Como leer el resultado
+
+  - **OK** — el estado persistido quedo en el esperado.
+  - **FALLA** — quedo en otro. Si la nota dice *"BIND no resolvio"*, el gate ni siquiera se
+    ejercito: el alta pasa `rechazarSiFalla: false`, asi que una falla del proveedor cae en
+    `ErrorValidacionBind` y la cuenta se queda con el estado que le puso el insert. Eso no es un bug
+    del gate.
+  - **ERROR** — el request fallo (token, red, 500).
+
+  ## Es repetible
+
+  Cada caso se da de baja a si mismo antes del alta, asi que se puede correr las veces que haga
+  falta sin pasar por el CLEAN. Y como `scl_iutcl_Cuenta_Retiro` hace upsert por
+  `(id_cliente, CBU, moneda, numecuen)`, se reusa el mismo `ID_Cuenta` en vez de acumular filas.
+
+  ## Valorizado desactualizado
+
+  Los importes de los comentarios son de la corrida del 2026-08-20 (MEP 1.535,09). Si un caso de
+  umbral falla, revalidar con `98 - Valorizado de un cliente` antes de culpar al gate: puede que el
+  cliente haya cruzado el millon.

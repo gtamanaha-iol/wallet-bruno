@@ -1,0 +1,90 @@
+info:
+  name: 01 - EjecutarExtraccion
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/ExtraccionService/EjecutarExtraccion/false"
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "idOrigen": "61232337",
+        "destinatario": {
+          "cbu": "0170309040000032224942"
+        },
+        "valorTransferencia": {
+          "moneda": "ARS",
+          "monto": 1.0
+        },
+        "parametros": {
+          "idCuenta": "20-1-735154-1-5"
+        },
+        "concepto": "VAR"
+      }
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  # EjecutarExtraccion
+
+  El salto que hace el ListenerKafka despues de consumir `ExtraccionBindMessageHomo`:
+  `CashOutProxy.EjecutarExtraccion` -> `POST cashout/EjecutarExtraccion/{relanzar}`.
+  Ver los docs de la carpeta para el recorrido completo.
+
+  ## Antes de correrlo
+
+  1. Generar un movimiento con `Extraer` y anotar el `idCuentaMovim`.
+  2. Poner ese id en `idOrigen`, y el CBU / importe / moneda del **mismo** movimiento.
+
+  El body de ejemplo apunta al movimiento 61232337 (cliente 392836, $100 al CBU
+  0170309040000032224942 del BBVA), generado el 2026-09-18 y que quedo en estado 1.
+
+  Los datos del movimiento salen de:
+
+  ```sql
+  SELECT m.ID_Cuenta_Movim, m.ID_Cliente, m.ID_Tipo_Cuenta, m.MontoXXX, e.CBUDestX,
+         b.ID_Extraccion_Estado, b.EstadoBind
+  FROM tcl_cuenta_movim m (NoLock)
+    INNER JOIN Tcl_Cuenta_Movim_Extraccion e (NoLock) ON e.ID_Cuenta_Movim = m.ID_Cuenta_Movim
+    LEFT JOIN Tcl_Movimiento_Extraccion_Bind b (NoLock) ON b.ID_Cuenta_Movim = m.ID_Cuenta_Movim
+  WHERE m.ID_Cuenta_Movim = 61232337;
+  ```
+
+  `parametros.idCuenta` es la cuenta BIND de IOL, no la del cliente: `20-1-735154-1-5`
+  en pesos y `21-1-99999-4-6` en dolares (`CuentasBind` del appsettings del listener).
+
+  ## Validaciones que corre antes de llamar al banco
+
+  En orden, en `ExtraccionBindService.EjecutarExtraccion`:
+
+  1. ya relanzada / cancelada por el cliente / ya completa -> corta
+  2. CUIT del cliente
+  3. saldo suficiente -> si no, pasa a revision manual (estado 6)
+  4. dia sin actividad bancaria -> revision manual
+  5. ventana horaria (`HoraComienzoExtraccionAutomatica` a `HoraFinExtraccionAutomatica`)
+  6. restriccion de fraude (ATO) y pausa vigente del banco
+  7. recien ahi: `ProxyMediator/RealizarTransferenciaPorCBUAsync` o el proxy BIND
+
+  Casi todas devuelven 200 con `responseType: error` o mueven el movimiento a estado 6,
+  asi que el resultado real se confirma en la base, no en el body.
+
+  ## Cuidado
+
+  Genera un **envio real de fondos** en homo. No lo corras contra un movimiento que ya
+  esta en estado 3 (Completada) esperando que reintente: el servicio corta y no hace nada.

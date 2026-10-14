@@ -1,0 +1,32 @@
+info:
+  name: 12 - Cancelar inexistente
+  type: http
+  seq: 13
+
+http:
+  method: POST
+  url: "{{baseUrl}}/withdrawals/usa/99999999/cancel"
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        const detail = (res.body && res.body.detail) || '';
+        console.log(`[Cancelar inexistente] ${res.status} — ${detail || JSON.stringify(res.body)}`);
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "404"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  Cancela un id que no existe. Espera **404**.
+
+  CashOut devuelve el mismo 404 cuando la extraccion existe pero es de **otro** cliente, para no
+  revelar ids ajenos.

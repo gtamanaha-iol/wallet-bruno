@@ -1,14 +1,14 @@
 info:
-  name: 02 - Valorizado de un cliente
+  name: 98 - Valorizado de un cliente
   type: http
-  seq: 2
+  seq: 9
 
 http:
   method: GET
   url: "{{quotesUrl}}/api/Quotes/mep/referenceValue"
   headers:
     - name: Authorization
-      value: "Bearer {{tokenValorizado}}"
+      value: Bearer {{tokenValorizado}}
 
 runtime:
   scripts:
@@ -18,6 +18,11 @@ runtime:
         // por que un caso de umbral dio lo que dio. El MEP ya viene en la respuesta del
         // request de arriba (el endpoint devuelve un numero pelado, sin objeto).
         const axios = require('axios');
+
+        const ESTADO_NUM = { pendienteDeVerificacion:0, aceptada:1, rechazada:2, baja_Pendiente:3, baja:4, suspendida:5, pendienteDeAprobacionManual:6 };
+        const MONEDA_NUM = { pesosArgentinos:1, dolaresUsa:2 };
+        const estadoNum = e => typeof e === 'number' ? e : (ESTADO_NUM[e] ?? e);
+        const monedaNum = m => typeof m === 'number' ? m : (MONEDA_NUM[m] ?? m);
 
         const tenenciaUrl = bru.getEnvVar('tenenciaUrl');
         const idCliente   = bru.getEnvVar('idCliente');
@@ -94,6 +99,7 @@ settings:
   timeout: 0
   followRedirects: true
   maxRedirects: 5
+  forwardAuthorizationHeader: true
 
 docs: |
   # Valorizado de un cliente

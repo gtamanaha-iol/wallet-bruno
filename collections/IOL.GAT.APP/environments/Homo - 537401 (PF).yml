@@ -1,0 +1,12 @@
+name: Homo - 537401 (PF)
+variables:
+  - name: baseUrl
+    value: https://api-gat-app-homologacion.invertironline.com
+  - name: username
+    value: registro_537401
+  - name: password
+    value: testeo123
+  - secret: true
+    name: token
+  - name: idCuentaMovimiento
+    value: "62358656"

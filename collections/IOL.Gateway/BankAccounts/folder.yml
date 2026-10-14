@@ -1,0 +1,57 @@
+info:
+  name: BankAccounts
+  type: folder
+  seq: 2
+
+request:
+  auth: inherit
+
+docs: |
+  # BankAccounts
+
+  `BankAccountController` del Gateway — ruta base `bank-accounts`.
+
+  | Metodo | Ruta | Que hace |
+  |---|---|---|
+  | POST | `bank-accounts/two-factor-auth` | Genera y manda por mail el codigo de segundo factor |
+  | POST | `bank-accounts` | Valida el codigo y da de alta la cuenta de extraccion |
+  | GET | `bank-accounts` | Lista las cuentas del cliente del token |
+  | DELETE | `bank-accounts` | Baja de una cuenta (`{ "accountId": N }`) |
+
+  El alta son **dos llamadas**: primero `01 - Generar segundo factor`, despues
+  `02 - Alta cuenta extraccion` con el codigo que llego al mail.
+
+  El `00 - CLEAN` no es parte del alta: es para poder repetirla. Si el `02` responde
+  *"El cliente ya tiene asociada la cuenta bancaria"*, correr el `00` y volver a empezar
+  desde el `01` (el codigo de 2FA vence, no conviene gastarlo antes de limpiar).
+
+  ## El cliente sale del token, no del body
+
+  `AuthorizationService.GetCustomerId()` lee el claim `ID` del bearer. Ninguno de los
+  requests manda `idCliente`: el cliente lo define el usuario con el que se pidio el token,
+  o sea las variables `username` / `password` del environment.
+
+  Usar **Homo - 537401 (PF)**, que ademas tiene los env vars de esta secuencia
+  (`bankAccountIdentifier`, `verificationCode`, `bankAccountId`). Para correr el alta como
+  otro cliente se cambia de environment, no se toca ningun request.
+
+  El token lo pide el `before-request` de la coleccion, que lo deja en el env var `token`
+  — de ahi lo levanta el CLEAN para disparar los `DELETE` con axios.
+
+  ## Contra que pega el Gateway
+
+  Los dos endpoints son un pasamanos a `MO.API.CuentasExtraccion`:
+
+  - `two-factor-auth` -> `api/v1/AltaCuentaExtraccion/GenerateTwoFactorCode`
+  - `POST bank-accounts` -> `api/v1/BankAccount/RegisterBankAccount`
+
+  El segundo valida el codigo contra User Management antes de crear la cuenta, asi que un
+  codigo vencido o equivocado devuelve `200` con `valid: false` — no un `4xx`.
+
+  ## El prestador de validacion es del cliente
+
+  Cual proxy valida la cuenta (BIND o Supervielle) sale de
+  `Scl_Tcl_Cliente_Valida_Cuenta_Por_Prestador` con el `idCliente`, y se configura a mano en
+  `tcl_ValidacionCuentaClientePrestador` (`1 = BIND`, `2 = SUPV`). Un cliente sin fila cae
+  al default **2 = SUPV**, que es el caso de 537401: sus altas se validan contra el proxy de
+  Supervielle y suelen quedar en `pendienteDeVerificacion`.

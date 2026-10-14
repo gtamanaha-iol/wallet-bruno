@@ -1,0 +1,39 @@
+info:
+  name: 10 - Cancelar extraccion
+  type: http
+  seq: 11
+
+http:
+  method: POST
+  url: "{{baseUrl}}/withdrawals/usa/{{usaWithdrawalId}}/cancel"
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |-
+        if (!bru.getEnvVar('usaWithdrawalId')) {
+          throw new Error('[Cancelar] falta usaWithdrawalId: correr antes el 01 - Extraccion USA');
+        }
+    - type: after-response
+      code: |-
+        console.log(`[Cancelar] extraccion ${bru.getEnvVar('usaWithdrawalId')} → ${res.status} ${res.status === 204 ? '(cancelada, fondos liberados)' : JSON.stringify(res.body)}`);
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "204"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  Caso feliz de cancelacion. `POST withdrawals/usa/{id}/cancel` sobre la extraccion que creo el `01`.
+
+  Sin body: el cliente no indica motivo. Espera **204** sin body. La extraccion pasa a
+  **Cancelled** y se liberan los fondos retenidos.
+
+  Solo se puede cancelar mientras esta en **FundsHeld** (Iniciado). Si el backoffice ya la marco
+  En proceso, CashOut responde 409.

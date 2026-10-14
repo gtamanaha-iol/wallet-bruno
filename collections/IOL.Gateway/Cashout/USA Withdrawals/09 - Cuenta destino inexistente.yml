@@ -1,0 +1,48 @@
+info:
+  name: 09 - Cuenta destino inexistente
+  type: http
+  seq: 10
+
+http:
+  method: POST
+  url: "{{baseUrl}}/withdrawals/usa"
+  headers:
+    - name: Content-Type
+      value: application/json
+    - name: Idempotency-Key
+      value: "{{usaIdempotencyKeyTmp}}"
+  body:
+    type: json
+    data: |-
+      {
+        "amount": {{usaWithdrawalAmount}},
+        "bankAccountId": 999999999
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |-
+        bru.setVar('usaIdempotencyKeyTmp', `usa-inexistente-${Date.now()}`);
+    - type: after-response
+      code: |-
+        console.log(`[Inexistente] ${res.status} — ${(res.body && res.body.detail) || JSON.stringify(res.body)}`);
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "422"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  `bankAccountId` que no existe para nadie.
+
+  Espera **422** — `"The bank account was not found."`.
+
+  Es el contraste del caso `08`: ambos devuelven el mismo status y mensaje. Si alguna vez
+  difieren, el endpoint pasa a ser un oraculo de que ids existen.

@@ -1,0 +1,38 @@
+info:
+  name: 04 - Paginado
+  type: http
+  seq: 4
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api/v1/usa-withdrawals?from={{usaFrom}}&to={{usaTo}}&page=2&pageSize=2"
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.body.pageSize
+      operator: eq
+      value: "2"
+  postResponse: |
+    const items = res.body?.items ?? [];
+    console.log('page =', res.body?.page, '| total =', res.body?.total, '| ids =', items.map(i => i.id));
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  # 04 — Paginado
+
+  Página 2 de a 2 filas: verifica el `OFFSET/FETCH` y que el `total` no dependa de la página.
+
+  ## Esperado
+
+  - HTTP 200, `page = 2`, `pageSize = 2`.
+  - Hasta 2 `items`, distintos a los de la página 1 (comparar con 01 usando `pageSize=2`).
+  - `total` igual al del 01 (mismo rango).
+  - Una página más allá del total: 200 con `items` vacío y el mismo `total`.

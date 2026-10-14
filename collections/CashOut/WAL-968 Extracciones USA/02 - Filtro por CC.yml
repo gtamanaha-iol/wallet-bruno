@@ -1,0 +1,42 @@
+info:
+  name: 02 - Filtro por CC
+  type: http
+  seq: 2
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api/v1/usa-withdrawals?cc=212714&from={{usaFrom}}&to={{usaTo}}"
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+  postResponse: |
+    const items = res.body?.items ?? [];
+    console.log('total =', res.body?.total, '| clientIds =', [...new Set(items.map(i => i.clientId))]);
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  # 02 — Filtro por CC
+
+  El campo "CC" de la pantalla. El service de WAL-922 traduce el CC a `ID_Cliente` y el
+  repositorio filtra por cliente: usa el índice `IX_tcl_cuenta_movim (ID_Cliente, ID_Tipo_Cuenta, FechMovi)`.
+
+  Cliente de prueba: **887257**, CC **212714**.
+
+  ## Esperado
+
+  - HTTP 200, todos los `items` con `clientId = 887257`.
+  - Con un CC que no existe: 200 con página vacía y `total = 0`.
+
+  ## Ojo
+
+  `GetClientIdByAccountNumberAsync` (WAL-922) compara `NumeCuen` con el CC como número.
+  La cuenta USA del cliente tiene formato `nnnnn-EEUU`, así que el match sale por la
+  cuenta ARG del mismo cliente. Sirve porque es el mismo `ID_Cliente`.

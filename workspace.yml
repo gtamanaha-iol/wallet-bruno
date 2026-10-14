@@ -22,6 +22,12 @@ collections:
     path: "collections/HUB.Proxy.Supv.API"
   - name: "Broker"
     path: "collections/Broker"
+  - name: "CuentasExtraccion"
+    path: "collections/CuentasExtraccion"
+  - name: "Misc"
+    path: "collections/Misc"
+  - name: "IOL.GAT.APP"
+    path: "collections/IOL.GAT.APP"
 
 specs:
 

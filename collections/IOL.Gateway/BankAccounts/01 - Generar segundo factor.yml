@@ -1,0 +1,70 @@
+info:
+  name: 01 - Generar segundo factor
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{baseUrl}}/bank-accounts/two-factor-auth"
+  headers:
+    - name: Content-Type
+      value: application/json
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        // El codigo NO viene en la respuesta: se manda por mail. Lo unico que devuelve el
+        // endpoint es a que direccion fue y cuanto dura, asi que se loguea para saber
+        // donde buscarlo y hasta cuando sirve.
+        const b = res.body || {};
+
+        if (!b.wasGenerated) {
+          console.error('[2FA] no se genero el codigo:', JSON.stringify(b));
+        } else {
+          console.log(`[2FA] codigo enviado a ${b.notificationEmail} — expira en ${b.expirationTime} min`);
+          console.log('[2FA] copiar el codigo del mail al env var "verificationCode" y correr el request 02');
+        }
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.body.wasGenerated
+      operator: eq
+      value: "true"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  # Generar segundo factor
+
+  `POST bank-accounts/two-factor-auth` — sin body.
+
+  Genera el codigo de 2FA para el cliente del token y lo manda por mail. Es el paso 1 de 2
+  del alta: el request `02` no funciona sin un codigo vigente.
+
+  Respuesta (`GenerateCodeResponseDTO`):
+
+  ```json
+  {
+    "wasGenerated": true,
+    "expirationTime": 10,
+    "notificationEmail": "j***@***.com"
+  }
+  ```
+
+  | Campo | Que es |
+  |---|---|
+  | `wasGenerated` | Si User Management genero el codigo |
+  | `expirationTime` | Minutos de vigencia — pasado eso el request 02 devuelve `valid: false` |
+  | `notificationEmail` | Mail al que fue el codigo (enmascarado) |
+
+  El codigo **no** viene en la respuesta ni se puede leer por API: hay que sacarlo del mail
+  de la casilla del usuario de prueba y pegarlo en el env var `verificationCode`.
+
+  El Gateway arma el request contra CuentasExtraccion con `products: Alyc` fijo
+  (`BankAccountProxy.GenerateTwoFactorAuth`), no es configurable desde aca.

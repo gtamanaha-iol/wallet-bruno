@@ -1,0 +1,122 @@
+info:
+  name: 02 - Alta cuenta extraccion
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: "{{baseUrl}}/bank-accounts"
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "currency": "ARS",
+        "identificationType": "Autodetectar",
+        "identifier": "{{bankAccountIdentifier}}",
+        "type": "CajaAhorro",
+        "verificationCode": 654606,
+        "verificationType": "TwoFactorAuth"
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |-
+        // El body interpola verificationCode SIN comillas porque el DTO lo recibe como int.
+        // Un codigo con cero a la izquierda ("012345") romperia el JSON, y del lado del
+        // servidor se compara como numero igual — asi que se normaliza antes de mandarlo.
+        const raw = String(bru.getEnvVar('verificationCode') || '').replace(/\D/g, '');
+
+        if (!raw) {
+          throw new Error('[Alta] falta el env var verificationCode: correr el request 01 y copiar el codigo del mail');
+        }
+
+        bru.setEnvVar('verificationCode', String(Number(raw)));
+    - type: after-response
+      code: |-
+        // Ojo: un codigo vencido/incorrecto tambien devuelve 200. La respuesta real esta
+        // en "valid", no en el status.
+        const b = res.body || {};
+
+        if (!b.valid) {
+          console.error('[Alta] el codigo de 2FA no es valido.' +
+            (b.maxAllowedAttemptsExceeded ? ' Se agotaron los intentos: regenerar con el request 01.' : ' Regenerar con el request 01.'));
+        } else {
+          const cuenta = b.bankAccount || {};
+          // Se guarda el idCuenta para poder reusarlo (baja, o como destino de una extraccion).
+          bru.setEnvVar('bankAccountId', cuenta.accountId);
+
+          console.log(`[Alta] cuenta ${cuenta.accountId} — ${cuenta.bankName} — ${cuenta.cbuNumber} — estado ${cuenta.accountState}`);
+          if (cuenta.validationDetails) console.log(`[Alta] detalle validacion: ${cuenta.validationDetails}`);
+        }
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.body.valid
+      operator: eq
+      value: "true"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  # Alta cuenta extraccion
+
+  `POST bank-accounts` — paso 2 de 2. Valida el codigo de 2FA contra User Management y, si
+  esta bien, crea la cuenta de extraccion.
+
+  Antes de correrlo: ejecutar `01 - Generar segundo factor` y pegar el codigo del mail en el
+  env var `verificationCode`.
+
+  ## Campos (`RegisterBankAccountRequest`)
+
+  | Campo | Valores | Nota |
+  |---|---|---|
+  | `currency` | `ARS`, `USD` | Cualquier otro valor rompe el mapeo del Gateway (`CurrencyIOL.ToLongCurrencyName` tira `NotImplementedException` => 500) |
+  | `identificationType` | `NumeroCbu`, `AliasCbuCvu`, `NumeroCvu`, `Autodetectar` | Nombre del enum, no el numero |
+  | `identifier` | CBU / CVU / alias | |
+  | `type` | `CajaAhorro`, `CuentaCorriente`, `CuentaVirtual` | |
+  | `verificationCode` | codigo del mail | Numerico, sin comillas. El script `before-request` le saca los ceros a la izquierda para no romper el JSON |
+  | `verificationType` | `TwoFactorAuth` | `TOTP` esta en el enum pero CuentasExtraccion lo rechaza (`InvalidVerificationType`) |
+
+  Conviene dejar `Autodetectar`: el servicio deduce CBU/CVU/alias del identificador. Mandar
+  un tipo explicito que no coincida con el identificador real desalinea el validador de
+  formato con el endpoint de BIND que se consulta.
+
+  `idCliente` no va en el body — sale del claim `ID` del token.
+
+  ## Interpretar la respuesta
+
+  ```json
+  {
+    "valid": true,
+    "maxAllowedAttemptsExceeded": false,
+    "bankAccount": { "accountId": 123, "bankName": "...", "cbuNumber": "...", "accountState": "..." }
+  }
+  ```
+
+  - `valid: false` => el codigo estaba mal o vencido. **Devuelve 200 igual**, con
+    `bankAccount` en null. Regenerar con el request `01`.
+  - `maxAllowedAttemptsExceeded: true` => se agotaron los intentos del codigo.
+  - `valid: true` => cuenta creada. El script guarda el `accountId` en el env var
+    `bankAccountId`.
+
+  El estado inicial suele ser `pendienteDeVerificacion` (el front lo muestra como *Iniciada*)
+  hasta que la reconsulta contra BIND la pasa a `aceptada`.
+
+  ## Si devuelve "El cliente ya tiene asociada la cuenta bancaria"
+
+  `BuscarCuentaDuplicada` bloquea si el cliente ya tiene ese CBU en esa moneda en estado
+  `Aceptada`, `PendienteDeVerificacion` o `PendienteDeAprobacionManual`.
+
+  Correr **`00 - CLEAN cuenta que bloquea el alta`** y despues volver al `01`: da de baja
+  esa cuenta y libera el re-registro. Ojo con el orden — el codigo de 2FA vence, asi que
+  limpiar primero y generar el codigo despues.

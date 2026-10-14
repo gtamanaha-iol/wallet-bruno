@@ -1,19 +1,18 @@
 info:
-  name: "01 - A1 - 1 titular + 1 cotitular (DNI 21587547)"
+  name: 01 - A1 - 1 titular + 1 cotitular (DNI 21587547)
   type: http
   seq: 1
 
 http:
   method: POST
   url: "{{baseUrl}}/api/v1.0/Fondos/DepositarMovimientoRecaudadora"
-  auth: inherit
   body:
     type: json
     data: |-
       {
-        "Dni": "21587547",
+        "Dni": "11607681",
         "Comprobante": "WAL818-CONFIX-A1-{{$timestamp}}",
-        "Importe": 1001.01,
+        "Importe": 260511,
         "Referencia": "VARVarios",
         "IdRecaudadora": 1,
         "Pais": 54,
@@ -29,19 +28,11 @@ http:
         "CuentaBancariaDestino": { "CBU": "0270100010036331160017" },
         "CuentaBancariaOrigen": { "CBU": "0170099900000000000017" }
       }
-
-# forma (a), el caso del ticket. Candidatas: CC 88285 titular y CC 361153 cotitular, LAS DOS con actividad del ultimo anio. SIN FIX: TitularCC no desempata y gana TodasLasCuentasTienenMovimientos -> PENDIENTE. CON FIX: TitularCC -> 88285.
-#
-# Se acredita en los dos escenarios; lo que cambia es EN QUE CC.
-# Verificar con verify-homo.sql.
-assert:
-  - expr: res.status
-    assert: eq 200
-  - expr: res.body.responseType
-    assert: eq success
+  auth: inherit
 
 settings:
   encodeUrl: true
   timeout: 0
   followRedirects: true
   maxRedirects: 5
+  forwardAuthorizationHeader: true

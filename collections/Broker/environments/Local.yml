@@ -1,0 +1,5 @@
+name: Local
+variables:
+  - name: activitiesBaseUrl
+    value: http://localhost:50051
+    description: Levantar el Perfil de Homologacion

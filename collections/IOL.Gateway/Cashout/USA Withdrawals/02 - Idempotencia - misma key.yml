@@ -1,0 +1,60 @@
+info:
+  name: 02 - Idempotencia - misma key
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: "{{baseUrl}}/withdrawals/usa"
+  headers:
+    - name: Content-Type
+      value: application/json
+    - name: Idempotency-Key
+      value: "{{usaExistingIdempotencyKey}}"
+  body:
+    type: json
+    data: |-
+      {
+        "amount": {{usaExistingAmount}},
+        "bankAccountId": {{usaBankAccountId}}
+      }
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        // La idempotencia se ve en el id, no en el status: un alta nueva tambien responde 201.
+        const esperado = Number(bru.getEnvVar('usaExistingWithdrawalId'));
+        const recibido = Number(res.body && res.body.id);
+
+        bru.setVar('usaMismoId', String(recibido === esperado));
+        console.log(`[Idempotencia] esperado ${esperado}, recibido ${recibido}`);
+
+        if (recibido !== esperado) console.error('[Idempotencia] se creo una extraccion nueva: la key no se respeto');
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "201"
+    - expression: bru.getVar("usaMismoId")
+      operator: eq
+      value: "true"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  Reintento con la `Idempotency-Key` de una extraccion que **ya existe** en homologacion.
+
+  Espera **201 con el mismo `id`** (`usaExistingWithdrawalId`) — no una extraccion nueva.
+
+  **No depende del `01` y no crea nada.** CashOut resuelve la key en
+  `FindByIdempotencyKeyAsync` antes de validar cualquier otra cosa, asi que devuelve el id
+  existente sin tocar saldos. El estado de esa extraccion es indistinto: una cancelada sirve
+  igual.
+
+  Un 201 con otro `id` significa que la idempotencia no funciono y quedo una extraccion de mas,
+  con fondos retenidos que el Gateway no puede liberar.

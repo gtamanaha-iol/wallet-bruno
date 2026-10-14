@@ -2,9 +2,9 @@ name: Homologacion
 variables:
   - name: baseUrl
     value: https://cashin-api.app.homo.invertironline.com
-    description: ""
+    description: https://cashout-api.app.homo.invertironline.com
   - name: identityUrl
-    value: https://identity-server-homologacion.invertironline.com
+    value: https://identity-server-sts.homo.invertironline.com
     description: ""
   - name: clientId
     value: GT-TEST
@@ -14,4 +14,7 @@ variables:
     description: ""
   - name: runId
     value: "44"
+    description: ""
+  - name: importe_proveedores
+    value: "10"
     description: ""

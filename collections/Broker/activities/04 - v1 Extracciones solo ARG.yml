@@ -1,0 +1,25 @@
+info:
+  name: 04 - v1 Extracciones solo ARG
+  type: http
+  seq: 4
+
+http:
+  method: GET
+  url: "{{activitiesBaseUrl}}/api/clients/{{clientArgYUsa}}/movements?movementType=extraction&country=arg&currency=ARS&startDate={{startDate}}&endDate={{endDate}}"
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  Cuenta ARG en pesos: **no** se consulta la tabla USA.
+
+  **Esperado:** solo extracciones ARG, 0 USA (igual que en main).

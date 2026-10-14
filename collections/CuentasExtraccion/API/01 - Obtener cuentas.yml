@@ -5,16 +5,12 @@ info:
 
 http:
   method: GET
-  url: "{{baseUrl}}/api/v1/CuentasExtraccion/ObtenerCuentasExtraccion/{{idCliente}}"
+  url: "{{baseUrl}}/api/v1/CuentasExtraccion/ObtenerCuentasExtraccion/401243"
   headers:
     - name: Content-Type
       value: application/json
 
 runtime:
-  assertions:
-    - expression: res.status
-      operator: eq
-      value: "200"
   scripts:
     - type: after-response
       code: |-
@@ -36,12 +32,17 @@ runtime:
           const estado = ESTADOS[c.estadoCuentaBancaria] ?? c.estadoCuentaBancaria;
           console.log(`  ${c.idCuenta} | banco ${c.idBanco} ${c.nombreBanco || ''} | ${c.numeroCbu} | moneda ${c.moneda} | ${estado}`);
         }
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
 
 settings:
   encodeUrl: true
   timeout: 0
   followRedirects: true
   maxRedirects: 5
+  forwardAuthorizationHeader: true
 
 docs: |
   # ObtenerCuentasExtraccion

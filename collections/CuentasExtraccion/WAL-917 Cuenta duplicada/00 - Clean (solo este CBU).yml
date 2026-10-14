@@ -1,0 +1,90 @@
+info:
+  name: 00 - Clean (solo este CBU)
+  type: http
+  seq: 0
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api/v1/CuentasExtraccion/ObtenerCuentasExtraccion/1200862"
+  headers:
+    - name: Content-Type
+      value: application/json
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+  scripts:
+    - type: after-response
+      code: |-
+        // A diferencia del CLEAN de la carpeta raiz (que recorre TODOS los clientesDePrueba),
+        // este solo toca el CBU de esta carpeta: el cliente 1200862 es un scratch compartido
+        // con otras cuentas de prueba ('test', alias, etc.) que no hay que tocar.
+        const axios = require('axios');
+
+        const ID_CLIENTE = 1200862;
+        const CBU        = '0270002110000067020017';
+        const BLOQUEAN   = [0, 1, 6]; // ver BuscarCuentaDuplicada
+
+        const ESTADO_NUM = { pendienteDeVerificacion:0, aceptada:1, rechazada:2, baja_Pendiente:3, baja:4, suspendida:5, pendienteDeAprobacionManual:6 };
+        const ESTADOS    = { 0:'PendienteDeVerificacion', 1:'Aceptada', 2:'Rechazada', 3:'Baja_Pendiente', 4:'Baja', 5:'Suspendida', 6:'PendienteDeAprobacionManual' };
+        const estadoNum  = e => typeof e === 'number' ? e : (ESTADO_NUM[e] ?? e);
+
+        const baseUrl = bru.getEnvVar('baseUrl');
+        const headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + bru.getVar('accessToken') };
+
+        const cuentas = ((res.body && res.body.data) || []).filter(c => c.numeroCbu === CBU);
+        const aLimpiar = cuentas.filter(c => BLOQUEAN.includes(estadoNum(c.estadoCuentaBancaria)));
+
+        console.log(`[Clean] CBU ${CBU} | cliente ${ID_CLIENTE}: ${cuentas.length} cuenta(s) con ese CBU, ${aLimpiar.length} a dar de baja`);
+
+        let bajas = 0;
+        for (const c of aLimpiar) {
+          const desde = ESTADOS[estadoNum(c.estadoCuentaBancaria)] ?? c.estadoCuentaBancaria;
+          const r = await axios.post(
+            `${baseUrl}/api/v1/BajaCuentaExtraccion/EjecutarBajaCuentaExtraccion`,
+            { idCliente: ID_CLIENTE, idCuenta: c.idCuenta, idAccion: 4 },
+            { headers });
+
+          const mensaje = (r.data && r.data.data && r.data.data.mensaje) || null;
+          if (mensaje) {
+            bajas++;
+            console.log(`  ${c.idCuenta} | tipoCuentaBancaria ${c.tipoCuentaBancaria} | numeroCuenta ${c.numeroCuenta} | ${desde} -> Baja`);
+          } else {
+            console.log(`  ${c.idCuenta} | ${desde} -> SIN CAMBIO (respondio 200 sin mensaje)`);
+          }
+        }
+
+        console.log('');
+        console.log(cuentas.length
+          ? `[Clean] listo: ${bajas} baja(s) de ${aLimpiar.length} a limpiar. Se puede correr 01 -> 02 -> 03 de nuevo.`
+          : '[Clean] no habia ninguna cuenta con ese CBU (nada que limpiar).');
+
+        bru.setVar('cleanBajas', bajas);
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  # 00 — Clean (solo este CBU)
+
+  Da de baja lógica cualquier cuenta del cliente `1200862` con el CBU
+  `0270002110000067020017` que esté en un estado bloqueante (`0`, `1` o `6`).
+
+  A diferencia del **CLEAN** de la carpeta raíz de la colección (que recorre todos los
+  `clientesDePrueba` y todas sus cuentas), este solo toca este CBU puntual — `1200862` es
+  un cliente de scratch compartido con otras pruebas manuales (cuentas con `CBUXXXXX='test'`,
+  alias, etc.) que no conviene tocar.
+
+  No borra filas — es baja lógica, igual que el resto de la colección. Las filas duplicadas
+  que ya se crearon (por ejemplo `61464097`, de una corrida anterior) quedan en la base con
+  su `NumeCuen` distinto: eso es a propósito, es la evidencia del bug.
+
+  ## Cuándo correrlo
+
+  Antes de repetir `01 -> 02 -> 03` desde cero. No hace falta correrlo entre `01` y `03` —
+  eso ya lo hace el request `02`.

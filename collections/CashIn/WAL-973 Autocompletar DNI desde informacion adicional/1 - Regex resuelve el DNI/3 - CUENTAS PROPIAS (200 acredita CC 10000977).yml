@@ -1,0 +1,52 @@
+info:
+  name: "3 - CUENTAS PROPIAS (200 acredita CC 10000977)"
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1.0/Fondos/DepositarMovimientoRecaudadora"
+  auth: inherit
+  body:
+    type: json
+    data: |-
+      {
+        "Dni": "",
+        "Comprobante": "WAL973-R{{runId}}-PROP-{{$timestamp}}",
+        "Importe": {{importe_cuentasPropias}},
+        "Referencia": "",
+        "InformacionAdicional": "Datos Adicionales:{CUENTAS PROPIAS;20398105002 PEREZ JUAN TEST;;};",
+        "IdRecaudadora": 1,
+        "Pais": 54,
+        "TipoCuenta": 1,
+        "Moneda": 1,
+        "TipoDepositoFondo": 3,
+        "TipoMovimiento": 1,
+        "EstadoOperacion": 1,
+        "FechaMovimiento": "{{$isoTimestamp}}",
+        "FechaTransferencia": "{{$isoTimestamp}}",
+        "ConceptoOperacion": "Credito por Transferencia",
+        "NombreOrdenante": "TEST WAL973",
+        "CuentaBancariaDestino": { "CBU": "0270100010036331160017" },
+        "CuentaBancariaOrigen": { "CBU": "0170099900000000000017" }
+      }
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.body.responseType
+      operator: eq
+      value: "success"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  TIPO "CUENTAS PROPIAS" con el CUIT de una persona. La regex no distingue por TIPO:
+  cualquier texto "Datos Adicionales:{[TIPO;]<CUIT> <NOMBRE>...}" sirve.
+  Esperado: Dni 39810500 -> CC 10000977, acreditado.

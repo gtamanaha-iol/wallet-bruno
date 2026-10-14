@@ -5,7 +5,7 @@ info:
 
 http:
   method: GET
-  url: https://proxybind-api.invertironline.com/BindConsumerCopia/ConsultarCuentaAlias/gtamanaha
+  url: "{{baseUrl}}/BindConsumerCopia/ConsultarCuentaAlias/MANUDUIN.UALA"
   auth: inherit
 
 settings:
@@ -13,3 +13,4 @@ settings:
   timeout: 0
   followRedirects: true
   maxRedirects: 5
+  forwardAuthorizationHeader: true

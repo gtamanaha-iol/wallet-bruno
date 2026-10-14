@@ -1,0 +1,45 @@
+info:
+  name: activities
+  type: folder
+  seq: 4
+
+request:
+  variables:
+    - name: clientUsa
+      value: "537401"
+    - name: clientArgYUsa
+      value: "887257"
+    - name: startDate
+      value: 2026-09-01
+    - name: endDate
+      value: 2026-10-31
+  scripts:
+    - type: after-response
+      code: |-
+        if (Array.isArray(res.body)) {
+          const usa = res.body.filter(m => m.accountTypeId === 3 && m.movementTypeId === 4);
+          console.log('movimientos =', res.body.length, '| extracciones USA =', usa.length,
+                      '| ids USA =', usa.map(m => m.movementAccountId));
+        }
+
+docs:
+  content: |
+    # Activities
+
+    Listado de movimientos y operaciones que consumen la nweb y la app (vía IOL.Gateway). No requiere token.
+
+    | Environment | `activitiesBaseUrl` |
+    |---|---|
+    | **Local** | `http://localhost:5249` — `dotnet run --project src/Activities.GRPC --launch-profile HOMOLOGACION` (apunta a la base de homo) |
+    | **Homologacion** | `https://activities.homo.invertironline.com` (servicio desplegado) |
+
+    ## Extracciones USA (WAL-968)
+
+    Branch local `feature/WAL-968-usa-withdrawals-activities`: `GetUsaWithdrawalsAsync` suma las extracciones de
+    `Tcl_Cuenta_Movim_Extraccion_USA` al listado. Solo se consulta cuando la cuenta pedida es todas (0) o USA (3).
+
+    - Clientes de prueba: **537401** (solo USA, 9 extracciones entre 01/09 y 01/10) y **887257** (ARG + USA, 5 USA).
+    - Las USA vienen con `accountTypeId = 3`, `movementTypeId = 4`, monto negativo y `bank` en null.
+    - El script de la carpeta loguea en consola cuántas extracciones USA trajo cada request.
+    - En homo desplegado (sin el cambio) las USA **no** aparecen: sirve para comparar antes/después.
+  type: text/markdown

@@ -1,0 +1,65 @@
+info:
+  name: "1 - Fallback tabla Postgres (Dni 27910950 sin cuenta, 400 DNI o CUIT no coincide)"
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1.0/Fondos/DepositarMovimientoRecaudadora"
+  auth: inherit
+  body:
+    type: json
+    data: |-
+      {
+        "Dni": "",
+        "Comprobante": "WAL973-R{{runId}}-TABLA-{{$timestamp}}",
+        "Importe": {{importe_fallbackTabla}},
+        "Referencia": "",
+        "InformacionAdicional": "Etiquetas:{CONCEPTO:Transferencia recibida;TERMINAL:LINK0012100C5;NOMBRE:AGUSTINA FLORENCIA,AGU;DOCUMENTO:27910950;REFERENCIA:APC AHORRO;FORMATO_ZR:;LETINI:A;};Datos Adicionales:{AGUSTINA FLORENCIA,AGU - ------------;REF:APC-APC AHORRO BANCO DE LA PROVINCIA DE BUENO;}; Etiquetas:{CONCEPTO:Transferencia recibida;TERMINAL:LINK0012100C5;NOMBRE:AGUSTINA FLORENCIA,AGU;DOCUMENTO:;REFERENCIA:APC AHORRO;FORMATO_ZR:;LETINI:A;};Datos Adicionales:{AGUSTINA FLORENCIA,AGU;};",
+        "IdRecaudadora": 1,
+        "Pais": 54,
+        "TipoCuenta": 1,
+        "Moneda": 1,
+        "TipoDepositoFondo": 3,
+        "TipoMovimiento": 1,
+        "EstadoOperacion": 1,
+        "FechaMovimiento": "{{$isoTimestamp}}",
+        "FechaTransferencia": "{{$isoTimestamp}}",
+        "ConceptoOperacion": "Credito por Transferencia",
+        "NombreOrdenante": "TEST WAL973",
+        "CuentaBancariaDestino": { "CBU": "0270100010036331160017" },
+        "CuentaBancariaOrigen": { "CBU": "0170099900000000000017" }
+      }
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "400"
+    - expression: res.body.responseType
+      operator: eq
+      value: "invalidRequest"
+    - expression: res.body.message
+      operator: contains
+      value: "no coincide con Cuenta Comitente"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  Este texto esta cargado TAL CUAL en la tabla de homo (fila id 3 de cuit_additional_information,
+  466 caracteres, dni 27910950) y su bloque "Datos Adicionales" no trae CUIT: la regex no extrae
+  nada y se cae al fallback de Postgres.
+
+  Esperado: el Dni se completa con 27910950 (NO es el 400 de documento vacio). En homo no existe
+  un cliente con ese DNI, asi que no hay cuenta comitente y FondearCuenta responde 400
+  "DNI/CUIT no coincide con Cuenta Comitente", igual que el caso de IOL (2.3).
+
+  Esa respuesta esta INFERIDA del codigo (mismo camino que 2.3), todavia no se corrio: confirmar
+  en la primera corrida. La prueba de que se uso la tabla esta en la base:
+  audit_logs.modified_movement->>'Dni' = 27910950 (README, query 1).
+
+  Si la fila se borra de la tabla de homo, pasa a ser el 400 por documento vacio.

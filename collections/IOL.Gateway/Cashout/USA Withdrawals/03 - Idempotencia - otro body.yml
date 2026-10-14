@@ -1,0 +1,51 @@
+info:
+  name: 03 - Idempotencia - otro body
+  type: http
+  seq: 4
+
+http:
+  method: POST
+  url: "{{baseUrl}}/withdrawals/usa"
+  headers:
+    - name: Content-Type
+      value: application/json
+    - name: Idempotency-Key
+      value: "{{usaExistingIdempotencyKey}}"
+  body:
+    type: json
+    data: |-
+      {
+        "amount": {{usaOtherAmount}},
+        "bankAccountId": {{usaBankAccountId}}
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |-
+        // Derivado del importe de la extraccion existente: con un numero fijo, si alguna vez
+        // coincidiera con el real el 422 se transformaria en un 201 y el caso dejaria de probar.
+        bru.setVar('usaOtherAmount', Number(bru.getEnvVar('usaExistingAmount')) + 1);
+    - type: after-response
+      code: |-
+        console.log(`[Idempotencia] ${res.status} — ${(res.body && res.body.detail) || JSON.stringify(res.body)}`);
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "422"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  La `Idempotency-Key` de la extraccion existente, pero con otro `amount` (el real + 1).
+
+  Espera **422** — `"The idempotency key was already used with a different request."`. Una key
+  no puede reusarse para una solicitud distinta.
+
+  **No depende del `01` y no crea nada**: el rechazo ocurre al resolver la key, antes de
+  cualquier validacion de saldo o de cuenta.

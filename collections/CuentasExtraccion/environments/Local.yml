@@ -1,44 +1,35 @@
 name: Local
-
 variables:
-  # HTTP a proposito, igual que en la coleccion CashOut: si la API no expone un
-  # endpoint HTTPS, UseHttpsRedirection no puede resolver el puerto destino y deja
-  # pasar el HTTP. Asi no hay certificado self-signed en juego para el axios de los
-  # scripts.
-  #   cd src/MO.API.CuentasExtraccion.Host
-  #   $env:ASPNETCORE_ENVIRONMENT="HOMOLOGACION"; dotnet run --urls "http://localhost:5003"
   - name: baseUrl
-    value: http://localhost:5003
-
-  # Identity de HOMOLOGACION a proposito: los clientes y cuentas de prueba son datos
-  # de la base de homo, asi que la API local tiene que levantarse con
-  # ASPNETCORE_ENVIRONMENT=HOMOLOGACION para apuntar a la misma base y al mismo identity.
+    value: http://localhost:5000
+    description: "Puerto HTTP de Kestrel — evita el dev-cert self-signed que rompe el axios de los scripts (no hay UseHttpsRedirection, se sirve directo)."
   - name: identityUrl
     value: https://identity-server-homologacion.invertironline.com
+    description: ""
   - name: clientId
     value: GT-TEST
+    description: ""
   - name: clientSecret
     value: gt-secret-value
+    description: ""
   - name: scope
     value: MS-CEX
-
-  # Upstreams del valorizado de WAL-640. El token para estos necesita los DOS
-  # scopes: tenencia reenvia el Authorization a operatoria-simple para pedir el MEP
-  # con el que convierte los activos en dolares, asi que sin MS-OS el portafolio
-  # devuelve 500.
+    description: ""
   - name: tenenciaUrl
     value: https://tenencia-cliente-api.homo.invertironline.com
+    description: ""
   - name: quotesUrl
     value: https://operatoria-simple.app.homo.invertironline.com
+    description: ""
   - name: scopeValorizado
     value: MS-TEN MS-OS
-
-  # Datos de prueba por defecto. Ver 09-casos-de-prueba-homo.md en
-  # MO.API.CuentasExtraccion/local_docs/features/wal-640-aprobacion-automatica/
+    description: ""
   - name: idCliente
     value: "1195589"
+    description: ""
   - name: idCuenta
     value: "613911"
-  # Clientes que el CLEAN da de baja. Separados por coma.
+    description: ""
   - name: clientesDePrueba
-    value: "1195589,1035817,1189924,104310,617764,1201112,1201113,1193358,979714,949925,505258,887257"
+    value: 436286,401243,480262,651752,374630,536515,715842
+    description: ""

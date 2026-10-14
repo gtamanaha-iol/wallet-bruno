@@ -1,0 +1,54 @@
+info:
+  name: "1 - Dni informado y CUIT distinto en el texto (200 acredita CC 10000977, no la 10001302)"
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1.0/Fondos/DepositarMovimientoRecaudadora"
+  auth: inherit
+  body:
+    type: json
+    data: |-
+      {
+        "Dni": "39810500",
+        "Comprobante": "WAL973-R{{runId}}-BANCO-{{$timestamp}}",
+        "Importe": {{importe_bancoGana}},
+        "Referencia": "",
+        "InformacionAdicional": "Datos Adicionales:{PROVEEDORES;30590360763 EMPRESA TEST SRL;;};",
+        "IdRecaudadora": 1,
+        "Pais": 54,
+        "TipoCuenta": 1,
+        "Moneda": 1,
+        "TipoDepositoFondo": 3,
+        "TipoMovimiento": 1,
+        "EstadoOperacion": 1,
+        "FechaMovimiento": "{{$isoTimestamp}}",
+        "FechaTransferencia": "{{$isoTimestamp}}",
+        "ConceptoOperacion": "Credito por Transferencia",
+        "NombreOrdenante": "TEST WAL973",
+        "CuentaBancariaDestino": { "CBU": "0270100010036331160017" },
+        "CuentaBancariaOrigen": { "CBU": "0170099900000000000017" }
+      }
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.body.responseType
+      operator: eq
+      value: "success"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  El banco SI informa el Dni (39810500) y el texto trae el CUIT de OTRA persona (la empresa).
+  La extraccion solo corre cuando el Dni llega vacio: el dato del banco no se pisa.
+
+  Esperado: se acredita en la CC 10000977 (la del Dni informado) y NO en la 10001302 de la
+  empresa. Label de la metrica: dni_source="bank".

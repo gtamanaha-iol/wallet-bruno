@@ -5,10 +5,11 @@ info:
 
 http:
   method: GET
-  url: "{{baseUrl}}/api/v1/international-bank-account/{{bankAccountId}}"
+  url: "{{baseUrl}}/api/v1/international-bank-accounts/82"
 
 settings:
   encodeUrl: true
   timeout: 0
   followRedirects: true
   maxRedirects: 5
+  forwardAuthorizationHeader: true

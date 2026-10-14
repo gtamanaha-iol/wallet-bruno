@@ -1,0 +1,103 @@
+info:
+  name: 03 - Reconsultar extracciones (correr 6 veces)
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: "{{baseUrlHomo}}/api/v1/ReConsulta/reconsultaextracciones/2026-09-09"
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "tipo": 3,
+        "tamanoLoteReconsulta": 50,
+        "minutosEstadoBind": 20,
+        "minutosEsperaReconsulta": 0,
+        "cantidadReintentosReconsulta": 5,
+        "cuentaBancariaBindPesos": "20-1-735154-1-5",
+        "cuentaBancariaBindDolares": "21-1-99999-4-6"
+      }
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+  postResponse: |
+    const d = res.body?.data;
+    console.log("pendientes:", d?.cantidadTransaccionesPendientes,
+                "| relanzadas:", d?.cantidadTransaccionesRelanzadas);
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  # 03 — El bot de reconsulta
+
+  Mismo endpoint que dispara el WakeupManager cada 2 minutos, con los parámetros de
+  `SettingsReconsultarExtracciones` de homo.
+
+  ## `minutosEsperaReconsulta: 0` — a propósito
+
+  La espera entre intentos es un **parámetro del request**, no config del server
+  (`ObtenerListaMovimientosReconsulta` la lee de acá). Poniéndola en `0` se pueden
+  correr los 6 intentos seguidos en vez de esperar 3 minutos entre cada uno.
+
+  En producción va en `3`.
+
+  ## Qué pasa en cada corrida
+
+  | Corrida | Qué hace | Estado al terminar |
+  |---|---|---|
+  | 1 a 5 | escribe auditoría, pasa a estado 0, consulta al banco y reenvía | vuelve a 6 al fallar |
+  | 6 | reintentos = 5 → **cancela y libera el saldo** | **5** |
+
+  El campo `cantidadTransaccionesRelanzadas` de la respuesta dice cuántas encoló.
+
+  ## Validación entre corridas
+
+  ```sql
+  SELECT b.ID_Cuenta_Movim, b.ID_Extraccion_Estado,
+         (SELECT COUNT(*) FROM dbo.tco_historico_reintentos_extracciones r
+          WHERE r.id_cuenta_movim = b.ID_Cuenta_Movim) AS reintentos,
+         LEFT(b.Observacion, 60) AS obs
+  FROM dbo.Tcl_Movimiento_Extraccion_Bind b WITH (NOLOCK)
+  WHERE b.ID_Cuenta_Movim = <idCuentaMovim>;
+  ```
+
+  El contador de `reintentos` tiene que subir de a uno.
+
+  ## Al final — lo que hay que ver
+
+  | Qué | Dónde | Esperado |
+  |---|---|---|
+  | Estado del movimiento | `Tcl_Movimiento_Extraccion_Bind` | **5** |
+  | Saldo liberado | `Tcl_Cuenta_Movim` | `HechoXXX = 2`, `Notaxxxx = 'Cancelado por CashOut API'` |
+  | Observación | idem | **nunca** `"Intermitencias BIND"` |
+  | Auditoría | `tco_historico_reintentos_extracciones` | 5 filas |
+
+  Si aparece `"Intermitencias BIND, Se reintentó 5 veces"` y el movimiento quedó en
+  estado 7, el fin de vida no se aplicó: probablemente homo esté corriendo `main`.
+
+  ## En los logs del proxy
+
+  Por cada intento debería verse **primero un GET** de consulta y **después un POST**
+  de transferencia:
+
+  ```bash
+  uv run --no-project ~/.claude/skills/loki-explorer/scripts/loki_cli.py \
+    tail '{appname="Banks.Proxy.Supv.API"}' --filter '|= "<idCuentaMovim>"' --since 30m
+  ```
+
+  Y del lado de CashOut, el log del fin de vida:
+
+  ```logql
+  {appname="IOL.CashOut.API"} |= `Se agotaron los reintentos automáticos`
+  ```

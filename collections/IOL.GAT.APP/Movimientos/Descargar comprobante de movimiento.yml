@@ -1,0 +1,36 @@
+info:
+  name: Descargar comprobante de movimiento
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: "{{baseUrl}}/Movimientos/{{idCuentaMovimiento}}/boletoFinal"
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.headers["content-type"]
+      operator: contains
+      value: application/pdf
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  Mismo request que hace la app con el boton **"Descargar el comprobante"** del detalle de
+  un movimiento (`MovementsDetails/DownloadReceipt.tsx`).
+
+  Flujo: IOL.GAT.APP `Movimientos/{id}/boletoFinal` → corenet
+  `api/v2/GenerarImpresionBoletoMovimientoPDF/{id}`, que genera el PDF en el momento y lo
+  devuelve en base64. IOL.GAT.APP lo convierte a `application/pdf`.
+
+  - Si el movimiento no es del cliente del token, el backend responde **500**
+    (`UnauthorizedAccessException` en `BoletoService.ValidarCliente`).
+  - Para guardar el PDF: en la pestaña de respuesta, usar *Save response*.

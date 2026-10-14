@@ -1,0 +1,44 @@
+info:
+  name: 08 - Cancelar (pendiente ticket service)
+  type: http
+  seq: 8
+
+http:
+  method: PATCH
+  url: "{{baseUrl}}/api/v1/usa-withdrawals/61232455/status"
+  headers:
+    - name: Content-Type
+      value: application/json
+    - name: X-Client-Id
+      value: C-IOL-BACKOFFICE
+  body:
+    type: json
+    data: |-
+      {
+        "newStatus": "cancelled",
+        "changedBy": "bruno",
+        "reason": "Prueba WAL-968"
+      }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  # 08 — Cancelar (desde Iniciada o En proceso)
+
+  ⏳ **Hoy responde 500** (`UpdateStatusAsync` sin implementar). Queda armado para el
+  ticket del service, que lo conecta con `CancelWithdrawalAsync`.
+
+  Usar una extracción **distinta** a la del 07 (una nueva del 05, o una generada con
+  `alta-y-cancelacion-extraccion-usa.sql`).
+
+  ## Esperado (una vez conectado)
+
+  - 204. En la base: estado 7 (CANCELLED), `HechoXXX = 2`, `Saldcuen` **no** cambia y el
+    comprometido se libera.
+  - Como backoffice (`X-Client-Id: C-IOL-BACKOFFICE`) se puede cancelar desde Iniciada o
+    En proceso. Como cliente (sin ese header y con `X-IOL-Client-Id`), solo desde Iniciada.

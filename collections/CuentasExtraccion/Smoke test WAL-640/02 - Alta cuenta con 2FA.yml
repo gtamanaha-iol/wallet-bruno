@@ -1,0 +1,63 @@
+info:
+  name: 02 - Alta cuenta con 2FA
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/BankAccount/RegisterBankAccount"
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "clientId": 620272,
+        "bankAccountIdentifier": "0150902501000119142300",
+        "verificationCode": 630079,
+        "verificationType": 1,
+        "product": 1
+      }
+
+
+      // ID Cuenta - CC - Valorado
+      // 537401,36362 => $ 8.938,96
+      // 620272 45825 => $5.125.534,77
+      // 887257 212714 => $353.757.433.952,59
+
+      // "EntidadesPendienteAprobacionManual": { "IdsBancos": [ 100003, 100004, 100005, 100012 ] // ICBC, Wilobank, Ualá, PPay (Micro Sistemas S.A.U.)
+
+      // icbc 0150902501000119142300 pendiente (depende)
+      // Ualá 0000007900204010759428 siempre pendiente
+      // ppay 0000076500000000459949 siempre pendiente
+      // ripio 0000147800000072613513 siempre rechazada
+      // supv 0270100020003912460023 siempre aprobada
+      // mp 0000003100048372947231 siempre aprobada
+      // bbva 0170340340000078881237 siempre aprobada
+      // wilobank 3840100200000000013611 pendiente (depende)
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  # Paso 2 — Alta con 2FA
+
+  `POST api/v1/BankAccount/RegisterBankAccount`
+
+  **Reemplazar `verificationCode: 0` por el codigo recibido en el paso 1** antes de enviar.
+
+  | Campo | Enum | Valor |
+  |---|---|---|
+  | `clientId` | | 620272 |
+  | `bankAccountIdentifier` | | `000007650000000023834` (CVU PPay) |
+  | `verificationCode` | | el codigo recibido (numero) |
+  | `verificationType` | `VerificationType` | 1 = TwoFactorAuth, 2 = TOTP |
+  | `product` | `Product` | 1 = Alyc, 2 = Hub, 3 = Crypto |
+
+  El servicio valida el codigo contra User Management, autodetecta el tipo de identificador
+  (CBU/CVU/alias), consulta el banco y aplica las reglas de WAL-640 para el estado final.

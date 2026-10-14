@@ -1,0 +1,165 @@
+info:
+  name: 00 - CLEAN cuenta que bloquea el alta
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: "{{baseUrl}}/bank-accounts"
+  headers:
+    - name: Content-Type
+      value: application/json
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        // El GET de arriba ES el listado del cliente del token: este script solo da de baja
+        // lo que bloquearia el alta del request 02.
+        //
+        // Por defecto limpia UNICAMENTE la cuenta del identificador que se va a registrar
+        // (env var bankAccountIdentifier). En true da de baja todas las que bloquean, como
+        // el CLEAN de la coleccion CuentasExtraccion.
+        const LIMPIAR_TODAS = false;
+
+        const axios = require('axios');
+
+        const baseUrl = bru.getEnvVar('baseUrl');
+        // Lo deja el before-request de la coleccion, con el usuario del environment.
+        const token = bru.getEnvVar('token');
+        const headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token };
+
+        const identificador = String(bru.getEnvVar('bankAccountIdentifier') || '').trim();
+
+        // Los tres estados que hacen que BuscarCuentaDuplicada rechace un alta del mismo CBU
+        // y moneda. Las cuentas en rechazada, baja_Pendiente, baja o suspendida no bloquean
+        // nada: darlas de baja otra vez solo agrega ruido al historico de estados.
+        const BLOQUEAN_ALTA = ['pendientedeverificacion', 'aceptada', 'pendientedeaprobacionmanual'];
+
+        const cuentas = Array.isArray(res.body) ? res.body : [];
+        const bloqueantes = cuentas.filter(c => BLOQUEAN_ALTA.includes(String(c.accountState || '').toLowerCase()));
+
+        let aLimpiar;
+
+        if (LIMPIAR_TODAS) {
+          aLimpiar = bloqueantes;
+        } else {
+          aLimpiar = bloqueantes.filter(c => c.cbuNumber === identificador);
+
+          // El duplicado se busca por NumeroCbu. Si el identificador es un alias, la cuenta
+          // ya tiene el CBU resuelto y desde aca no hay con que matchearlo.
+          if (!aLimpiar.length && bloqueantes.length && !/^\d{22}$/.test(identificador)) {
+            console.log(`[Clean] "${identificador}" no es un CBU/CVU de 22 digitos: no se puede matchear contra las cuentas. Usar LIMPIAR_TODAS si hace falta.`);
+          }
+        }
+
+        console.log(`[Clean] ${cuentas.length} cuenta(s) del cliente, ${bloqueantes.length} bloquean un alta, ${aLimpiar.length} a dar de baja`);
+
+        let bajas = 0;
+        const errores = [];
+
+        for (const c of aLimpiar) {
+          try {
+            const r = await axios.delete(`${baseUrl}/bank-accounts`, { headers, data: { accountId: c.accountId } });
+
+            // closeWithdrawalBankAccount vuelve siempre en false: el Gateway deserializa el
+            // response de CuentasExtraccion (deleteAccount) contra un campo con otro nombre.
+            // El mensaje es la unica senal real, y viene null cuando el 200 no hizo nada
+            // (por ejemplo si la cuenta no es del cliente del token).
+            const mensaje = (r.data && r.data.message) || null;
+
+            if (mensaje) {
+              bajas++;
+              console.log(`  ${c.accountId} | ${c.cbuNumber} | ${c.accountState} -> Baja`);
+            } else {
+              errores.push(`cuenta ${c.accountId}: respondio 200 sin mensaje (no se dio de baja)`);
+              console.log(`  ${c.accountId} | ${c.cbuNumber} | ${c.accountState} -> SIN CAMBIO`);
+            }
+          } catch (e) {
+            const detalle = e.response ? `${e.response.status} ${JSON.stringify(e.response.data)}` : e.message;
+            errores.push(`cuenta ${c.accountId}: ${detalle}`);
+            console.log(`  ${c.accountId} | ${c.cbuNumber} | ${c.accountState} -> ERROR`);
+          }
+        }
+
+        console.log('');
+        console.log(`[Clean] ${bajas} cuenta(s) dadas de baja`);
+
+        if (errores.length) {
+          console.log(`[Clean] ${errores.length} error(es):`);
+          errores.forEach(e => console.log(`  - ${e}`));
+        }
+
+        bru.setVar('cleanBajas', bajas);
+        bru.setVar('cleanErrores', errores.length);
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: bru.getVar("cleanErrores")
+      operator: eq
+      value: "0"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |
+  # CLEAN
+
+  Da de **baja logica** la cuenta que hace que el request `02` responda
+  *"El cliente ya tiene asociada la cuenta bancaria"*, para poder repetir el alta.
+
+  Correr esto **antes** de `01 - Generar segundo factor`: el codigo de 2FA dura pocos
+  minutos y no conviene gastarlo limpiando.
+
+  ## Que hace
+
+  1. `GET bank-accounts` — el request en si, lista las cuentas del cliente del token.
+  2. Filtra las que estan en `pendienteDeVerificacion`, `aceptada` o
+     `pendienteDeAprobacionManual` — los tres estados con los que `BuscarCuentaDuplicada`
+     rechaza un alta nueva del mismo CBU y moneda
+     (`CuentaExtraccionService.cs:450`).
+  3. De esas, se queda con la del `bankAccountIdentifier` que se va a registrar.
+  4. Por cada una: `DELETE bank-accounts` con `{ "accountId": N }`.
+
+  Las cuentas en `rechazada`, `baja_Pendiente`, `baja` o `suspendida` se saltean: no
+  bloquean nada.
+
+  ## Por defecto es puntual, no un CLEAN completo
+
+  A diferencia del CLEAN de la coleccion `CuentasExtraccion` (que barre varios clientes de
+  prueba), este limpia **solo el CBU que estas registrando**, para no borrar el resto de
+  las cuentas del cliente. Para el barrido completo, poner `LIMPIAR_TODAS = true` en la
+  primera linea del script.
+
+  Si el `bankAccountIdentifier` es un **alias**, el match no funciona: el duplicado se
+  busca por `NumeroCbu` y la cuenta ya lo tiene resuelto. En ese caso avisa por consola y
+  hay que usar `LIMPIAR_TODAS`.
+
+  ## No borra filas
+
+  Es baja logica a proposito (SP `scl_dtcl_Retirement_Account_Logical_Deletion_Only`, con
+  motivo *"CBU dado de baja por el cliente."*). No hay endpoint de borrado fisico.
+
+  Cada corrida agrega una fila por cuenta en `Tcl_Cuenta_Retiro_Estado_Historico`: no
+  afecta las pruebas, pero ensucia el analisis del embudo sobre ese cliente.
+
+  ## Va por el Gateway, no directo a CuentasExtraccion
+
+  `DELETE bank-accounts` termina en `api/v1/BankAccount/PostCloseBankAccount`, que valida
+  que la cuenta sea del cliente del token antes de tocarla. Ir por aca evita meterle a esta
+  coleccion el otro identity (client_credentials con scope `MS-CEX`) y el baseUrl de
+  CuentasExtraccion, y ademas hace imposible dar de baja la cuenta de otro cliente por
+  error.
+
+  Si el `DELETE` con body llegara a fallar por infraestructura, la alternativa es
+  `POST api/v1/BajaCuentaExtraccion/EjecutarBajaCuentaExtraccion` con `idAccion: 4`
+  directo contra CuentasExtraccion — es lo que hace el CLEAN de esa coleccion.
+
+  ## La asercion
+
+  Falla si hubo cualquier error. El detalle sale por consola, cuenta por cuenta. Que no
+  haya nada para limpiar **no** es un error: loguea `0 cuenta(s) dadas de baja` y pasa.

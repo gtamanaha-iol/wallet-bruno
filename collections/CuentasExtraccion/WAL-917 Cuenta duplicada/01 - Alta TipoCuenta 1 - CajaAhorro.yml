@@ -1,0 +1,93 @@
+info:
+  name: 01 - Alta TipoCuenta 1 - CajaAhorro
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/CuentasExtraccion/AltaCuentaExtraccion"
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "idCliente": 1200862,
+        "moneda": 1,
+        "tipoIdentificacionCuentaRetiro": 1024,
+        "identificadorCuentaRetiro": "0270002110000067020017",
+        "tipoCuentaBancaria": 1
+      }
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        // Guarda el idCuenta para que el paso 02 (baja) lo use sin hardcodear.
+        //
+        // Ojo: este CBU ya esta Aceptada de antes, asi que BuscarCuentaDuplicada corta el
+        // alta ANTES de llegar al SP y la respuesta viene con data:null y
+        // responseType:"invalidRequest" ("El cliente ya tiene asociada la cuenta bancaria").
+        // Eso no es una falla del test: se resuelve el idCuenta releyendo el listado.
+        const axios = require('axios');
+        const ID_CLIENTE = 1200862;
+        const CBU = '0270002110000067020017';
+
+        const cuerpo = (res.body && res.body.data) || null;
+
+        if (cuerpo && cuerpo.idCuenta) {
+          console.log(`Cuenta ${cuerpo.idCuenta} | estado ${cuerpo.estadoCuentaBancaria} | esperado NumeCuen 021000006702001`);
+          bru.setVar('cuenta1Id', cuerpo.idCuenta);
+        } else {
+          console.log(`[setup] alta bloqueada por BuscarCuentaDuplicada (${res.body && res.body.message}) — releo el listado`);
+
+          const baseUrl = bru.getEnvVar('baseUrl');
+          const headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + bru.getVar('accessToken') };
+          const listado = await axios.get(`${baseUrl}/api/v1/CuentasExtraccion/ObtenerCuentasExtraccion/${ID_CLIENTE}`, { headers });
+          const existente = ((listado.data && listado.data.data) || []).find(c => c.numeroCbu === CBU);
+
+          if (!existente) {
+            throw new Error('No se creo la cuenta ni se encontro una existente con ese CBU.');
+          }
+
+          console.log(`Cuenta existente ${existente.idCuenta} | estado ${existente.estadoCuentaBancaria} | numeroCuenta ${existente.numeroCuenta}`);
+          bru.setVar('cuenta1Id', existente.idCuenta);
+        }
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  # 01 — Alta con TipoCuenta 1 (Caja de Ahorro)
+
+  Primer alta del CBU, con `tipoCuentaBancaria: 1`.
+
+  Este CBU (`0270002110000067020017`) es una cuenta **real** de Supervielle ya validada en
+  homo — existe hace rato como cuenta `61464101` del cliente `1200862` (un cliente de scratch
+  usado para pruebas manuales varias, no exclusivo de WAL-640), en estado `Aceptada (1)` con
+  `detalle_servicio_interbanking = "Cuenta habilitada por Supervielle."`.
+
+  Como ya está `Aceptada`, el `POST` normalmente **no** llega al SP: `BuscarCuentaDuplicada`
+  corta antes y devuelve `data: null` / `"El cliente ya tiene asociada la cuenta bancaria"`
+  (`responseType: "invalidRequest"`, con `status 200` igual — no es un error HTTP). El
+  `after-response` detecta ese caso y resuelve el `idCuenta` releyendo `ObtenerCuentasExtraccion`
+  en vez de asumir que vino en la respuesta del alta.
+
+  El SP `Scl_Cuenta_retiro_cbu` calcula `NumeCuen = '021' + Substring(CBU, 10, 12)` →
+  para este CBU, `021000006702001`.
+
+  Guarda `cuenta1Id` (variable de Bruno) con el `idCuenta` resultante (`61464101`), para que
+  el request `02 - Baja logica` lo use.
+
+  Como el CBU es real y BIND ya lo validó antes, la cuenta queda en `Aceptada (1)` — que **sí**
+  bloquea `BuscarCuentaDuplicada` (`0`, `1`, `6`) — así que acá el paso `02` es obligatorio,
+  a diferencia de lo que pasaría con un CBU inventado que BIND rechaza solo.

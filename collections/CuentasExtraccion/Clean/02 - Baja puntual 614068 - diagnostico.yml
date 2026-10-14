@@ -1,0 +1,138 @@
+info:
+  name: 02 - Baja puntual 614068 - diagnostico
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/BajaCuentaExtraccion/EjecutarBajaCuentaExtraccion"
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+        "idCliente": 505258,
+        "idCuenta": 614068,
+        "idAccion": 4
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |-
+        // Diagnostico: por que la baja de la cuenta 614068 (cliente 505258) no la mueve
+        // de Aceptada (1). Loguea el estado ANTES de intentar la baja.
+        const axios = require('axios');
+
+        const ESTADO_NUM = { pendienteDeVerificacion:0, aceptada:1, rechazada:2, baja_Pendiente:3, baja:4, suspendida:5, pendienteDeAprobacionManual:6 };
+        const MONEDA_NUM = { pesosArgentinos:1, dolaresUsa:2 };
+        const estadoNum = e => typeof e === 'number' ? e : (ESTADO_NUM[e] ?? e);
+        const monedaNum = m => typeof m === 'number' ? m : (MONEDA_NUM[m] ?? m);
+
+        const ID_CLIENTE = 505258;
+        const ID_CUENTA  = 614068;
+
+        const ESTADOS = {
+          0: 'PendienteDeVerificacion', 1: 'Aceptada', 2: 'Rechazada',
+          3: 'Baja_Pendiente', 4: 'Baja', 5: 'Suspendida', 6: 'PendienteDeAprobacionManual'
+        };
+        const nombre = v => v === null || v === undefined ? 'NO ESTA' : `${ESTADOS[v] ?? v} (${v})`;
+
+        const baseUrl = bru.getEnvVar('baseUrl');
+        const headers = {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + bru.getVar('accessToken')
+        };
+
+        const r = await axios.get(
+          `${baseUrl}/api/v1/CuentasExtraccion/ObtenerCuentasExtraccion/${ID_CLIENTE}`, { headers });
+        const cuenta = ((r.data && r.data.data) || []).find(c => c.idCuenta === ID_CUENTA);
+
+        console.log('== BAJA PUNTUAL 614068 ==');
+        console.log(`estado ANTES: ${nombre(cuenta ? estadoNum(cuenta.estadoCuentaBancaria) : null)}`);
+    - type: after-response
+      code: |-
+        // Loguea status + body de la baja, y relee el estado DESPUES para ver si cambio.
+        const axios = require('axios');
+
+        const ESTADO_NUM = { pendienteDeVerificacion:0, aceptada:1, rechazada:2, baja_Pendiente:3, baja:4, suspendida:5, pendienteDeAprobacionManual:6 };
+        const MONEDA_NUM = { pesosArgentinos:1, dolaresUsa:2 };
+        const estadoNum = e => typeof e === 'number' ? e : (ESTADO_NUM[e] ?? e);
+        const monedaNum = m => typeof m === 'number' ? m : (MONEDA_NUM[m] ?? m);
+
+        const ID_CLIENTE = 505258;
+        const ID_CUENTA  = 614068;
+
+        const ESTADOS = {
+          0: 'PendienteDeVerificacion', 1: 'Aceptada', 2: 'Rechazada',
+          3: 'Baja_Pendiente', 4: 'Baja', 5: 'Suspendida', 6: 'PendienteDeAprobacionManual'
+        };
+        const nombre = v => v === null || v === undefined ? 'NO ESTA' : `${ESTADOS[v] ?? v} (${v})`;
+
+        const baseUrl = bru.getEnvVar('baseUrl');
+        const headers = {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + bru.getVar('accessToken')
+        };
+
+        console.log('');
+        console.log(`[baja] HTTP status : ${res.status}`);
+        console.log(`[baja] body        : ${JSON.stringify(res.body)}`);
+
+        const r = await axios.get(
+          `${baseUrl}/api/v1/CuentasExtraccion/ObtenerCuentasExtraccion/${ID_CLIENTE}`, { headers });
+        const cuenta = ((r.data && r.data.data) || []).find(c => c.idCuenta === ID_CUENTA);
+        const estado = cuenta ? estadoNum(cuenta.estadoCuentaBancaria) : null;
+
+        console.log('');
+        console.log(`estado DESPUES: ${nombre(estado)}`);
+        console.log('');
+
+        if (estado === 4) {
+          console.log('OK: la baja funciono, la cuenta quedo en Baja (4). El alta ya se puede re-correr.');
+        } else if (res.status >= 400) {
+          console.log(`FALLA: el endpoint devolvio ${res.status}. No es el SP: la baja ni llego a ejecutarse.`);
+        } else {
+          console.log('OJO: el endpoint respondio 2xx pero la cuenta NO se movio de estado.');
+          console.log('     Es el bug del ID_Error: el servicio responde OK aunque el SP no ejecute la baja.');
+        }
+
+  assertions: []
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  # Baja puntual 614068 — diagnostico
+
+  Request de debugging: intenta dar de baja **una sola** cuenta (`614068`, cliente `505258`,
+  el CBU de Galicia en dolares del caso 01) y muestra exactamente que pasa.
+
+  ## Por que existe
+
+  En homo esa cuenta esta en `Aceptada (1)` y el CLEAN no la mueve, asi que el alta del caso 01
+  corta con *"el cliente ya tiene asociada la cuenta bancaria"*. Se confirmo por SQL que:
+
+  - el CBU **no** esta pineado por ningun DDC, asi que el SP `scl_dtcl_Cuenta_Retiro_Baja_Logica`
+    **si** podria bajarla (guarda evalua `ID_Error = 0`);
+  - **nunca** hubo una baja registrada para `614068` (`tcl_cuenta_retiro_log_baja` vacio).
+
+  O sea la baja no se esta ejecutando del lado del request, no del SP.
+
+  ## Que mirar en la consola
+
+  1. **estado ANTES** — deberia decir `Aceptada (1)`.
+  2. **HTTP status** y **body** de la baja.
+  3. **estado DESPUES** y el veredicto:
+     - `Baja (4)` -> la baja funciono.
+     - status `>= 400` -> el endpoint fallo (token/scope o 500); el CLEAN lo cuenta como error.
+     - `2xx` pero sigue en `1` -> el bug del `ID_Error != 1`: el servicio responde OK sin que el
+       SP haya ejecutado la baja.
+
+  Pegar la salida para seguir el diagnostico.

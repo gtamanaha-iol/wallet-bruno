@@ -34,4 +34,4 @@ variables:
     value: "613911"
   # Clientes que el CLEAN da de baja. Separados por coma.
   - name: clientesDePrueba
-    value: "1195589,1035817,1189924,104310,617764,1201112,1201113,1193358,979714,949925,505258,887257"
+    value: "436286,401243,480262,651752,374630,536515,715842"

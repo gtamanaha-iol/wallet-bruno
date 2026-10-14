@@ -5,20 +5,11 @@ info:
 
 http:
   method: GET
-  url: "{{baseUrl}}/api/v1/international-bank-account/status/{{status}}"
-  auth: none
-
-params:
-  query:
-    - name: Page
-      value: "1"
-      enabled: true
-    - name: PageSize
-      value: "20"
-      enabled: true
+  url: "{{baseUrl}}/api/v1/international-bank-accounts/status/{{status}}"
 
 settings:
   encodeUrl: true
   timeout: 0
   followRedirects: true
   maxRedirects: 5
+  forwardAuthorizationHeader: true

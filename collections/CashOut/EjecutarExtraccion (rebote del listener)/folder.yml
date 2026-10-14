@@ -1,0 +1,118 @@
+info:
+  name: EjecutarExtraccion (rebote del listener)
+  type: folder
+  seq: 4
+
+request:
+  scripts:
+    - type: before-request
+      code: |-
+        // Token client_credentials (scope MS-CASHOUT).
+        //
+        // A diferencia de `Extraer`, este endpoint vive en `ExtraccionServiceController`,
+        // que SI tiene [Authorize]: sin token responde 401. Por eso el script corta la
+        // corrida si no consigue el token, en vez de seguir best-effort.
+        const identityUrl  = bru.getEnvVar('identityUrl');
+        const clientId     = bru.getEnvVar('clientId');
+        const clientSecret = bru.getEnvVar('clientSecret');
+        const scope        = bru.getEnvVar('scope');
+
+        if (!clientSecret) {
+          throw new Error('Falta clientSecret en el environment: este endpoint requiere token.');
+        }
+
+        const axios = require('axios');
+        const tokenBody = 'grant_type=client_credentials'
+                        + '&client_id=' + encodeURIComponent(clientId)
+                        + '&client_secret=' + encodeURIComponent(clientSecret)
+                        + '&scope=' + encodeURIComponent(scope);
+
+        const tokenRes = await axios.post(identityUrl + '/connect/token', tokenBody, {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        });
+
+        if (!tokenRes.data.access_token) {
+          throw new Error('Respuesta sin access_token: ' + JSON.stringify(tokenRes.data));
+        }
+
+        bru.setVar('accessToken', tokenRes.data.access_token);
+        req.setHeader('Authorization', 'Bearer ' + tokenRes.data.access_token);
+
+docs:
+  content: |
+    # EjecutarExtraccion — el paso que dispara el listener
+
+    `POST /Extraer` **no** llama al banco: crea el movimiento, lo deja en estado
+    `0 = PendienteProcesoViaRedis` y publica un mensaje en Kafka. El envio al banco lo
+    dispara otro salto, y este request es ese salto hecho a mano.
+
+    ## El recorrido completo
+
+    | # | Quien | Que hace |
+    |---|---|---|
+    | 1 | CashOut.API `/Extraer` | crea el movimiento, estado 0, publica en `ExtraccionBindMessageHomo` |
+    | 2 | CashOut.ListenerKafka | consume el topico y llama por HTTP a la propia API |
+    | 3 | CashOut.API `/EjecutarExtraccion` | revalida, pasa a estado `1 = PendienteEnvioBind` y llama al banco |
+    | 4 | Banco | responde por el topico `BANKS_CashOut_Response_Homologacion` -> `EjecutarExtraccionCallback` |
+
+    **Este request es el paso 3.** Sirve para reintentar a mano un movimiento que quedo
+    trabado en estado 0 o 1, o para debuggear la validacion sin depender del listener.
+
+    ## Cuerpo del request
+
+    Es el `SolicitudTransferenciaBindModel` tal cual lo arma
+    `ExtraccionMapper.MapearDatosParaTransferencia` en el listener:
+
+    | Campo | De donde sale |
+    |---|---|
+    | `idOrigen` | `idCuentaMovim` que devolvio `/Extraer` |
+    | `destinatario.cbu` | CBU destino del movimiento (`Tcl_Cuenta_Movim_Extraccion.CBUDestX`) |
+    | `valorTransferencia` | importe y moneda (`ARS` para tipoCuenta 1, `USD` para 2) |
+    | `parametros.idCuenta` | cuenta BIND de IOL: `20-1-735154-1-5` en pesos, `21-1-99999-4-6` en dolares |
+    | `concepto` | siempre `VAR` |
+
+    `descripcion` y `listaEmails` no hace falta mandarlos: el servicio los sobreescribe
+    (`IOL {idOrigen}` y los mails de `ExtractionGeneralConfig`).
+
+    La URL termina en `/false` = `relanzar`. Con `true` se genera un `idOrigen` nuevo con
+    sufijo `R{n}` para forzar un reenvio — no lo uses salvo que sepas por que.
+
+    ## Auth
+
+    El endpoint requiere token client_credentials con scope `MS-CASHOUT` contra el
+    identity que valida la API (`identity-server-sts.homo.invertironline.com`). El script
+    de carpeta lo pide antes de cada request.
+
+    Verificado el 2026-09-18 contra homo: sin `Authorization` devuelve **401**; con token
+    valido devuelve **200**.
+
+    Ojo: el client `MS-CASHOUT` del `appsettings` **no** sirve para pedir el token
+    (`invalid_client`). El que funciona es `C-CASHOUT-LISTENER-KAFKA`, el mismo que usa
+    el listener.
+
+    ## Que devuelve
+
+    | Respuesta | Significa |
+    |---|---|
+    | 200 + `responseType: success` | se proceso (ojo: tambien cuando corta porque ya estaba completa) |
+    | 200 + `responseType: error` | fallo de negocio, el detalle va en `message` |
+    | 401 | falta el token o esta vencido |
+
+    Devuelve 200 con `responseType: error` en vez de un 4xx, asi que **hay que mirar el
+    body**, no solo el status. Para saber que paso de verdad, mirar la tabla:
+
+    ```sql
+    SELECT ID_Cuenta_Movim, ID_TransferenciaBind, ID_Extraccion_Estado, EstadoBind, Observacion
+    FROM Tcl_Movimiento_Extraccion_Bind (NoLock)
+    WHERE ID_Cuenta_Movim = 61232337;
+    ```
+
+    Estados: `0` PendienteProcesoViaRedis, `1` PendienteEnvioBind, `2` Pendiente,
+    `3` Completada, `4` CanceladaPorCliente, `5` Cancelada, `6` RevisionManual,
+    `7` ConsultaManualAdministracion.
+
+    ## Ojo
+
+    Esto **manda plata de verdad** en homo. Antes de correrlo conviene chequear que el
+    movimiento no este ya completo: si `ID_Extraccion_Estado = 3`, el servicio corta solo,
+    pero en cualquier otro estado reintenta el envio al banco.

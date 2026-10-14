@@ -1,0 +1,34 @@
+name: Local - USA (PF)
+variables:
+  - name: baseUrl
+    value: https://localhost:7215
+  - name: identityServerUrl
+    value: https://api-gat-app-homologacion.invertironline.com
+  - name: clientId
+    value: "537401"
+  - name: password
+    value: testeo123
+  - secret: true
+    name: token
+  - name: usaWithdrawalAmount
+    value: "33"
+  - name: usaBankAccountId
+    value: "71"
+  - name: usaBankAccountIdPending
+    value: "81"
+  - name: usaBankAccountIdRejected
+    value: "80"
+  - name: usaBankAccountIdOtherClient
+    value: "69"
+  - name: usaIdempotencyKey
+    value: usa-1791484513344-560933
+  - name: usaWithdrawalId
+    value:
+      type: number
+      data: "62358699"
+  - name: usaExistingIdempotencyKey
+    value: usa-1791484513344-560933
+  - name: usaExistingWithdrawalId
+    value: "62358667"
+  - name: usaExistingAmount
+    value: "321"

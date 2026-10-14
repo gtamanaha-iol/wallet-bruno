@@ -1,0 +1,57 @@
+info:
+  name: WAL-973 Autocompletar DNI desde informacion adicional
+  type: folder
+  seq: 3
+
+request:
+  auth: none
+  scripts:
+    - type: before-request
+      code: |-
+        // Importes por corrida. ValidarMovimiento rechaza un deposito duplicado por
+        // banco + fecha + dni + importe, asi que cada escenario usa un importe propio y
+        // subir runId aisla una corrida de la anterior.
+        //
+        // runId 1 -> 200101.11 / 200102.12 / ...    runId 2 -> 200201.11 / 200202.12 / ...
+        // El numero identifica el escenario y NO sigue el orden de las carpetas.
+        const runId = Number(bru.getEnvVar('runId'));
+        if (!Number.isInteger(runId) || runId < 1 || runId > 99) {
+          throw new Error('[runId] tiene que ser un entero entre 1 y 99, llego: ' + bru.getEnvVar('runId'));
+        }
+        const escenarios = {
+          proveedores: 11, var: 12, cuentasPropias: 13, sinTipo: 14,
+          sieteDigitos: 21, empresa: 22, entidadExcluida: 23,
+          bancoGana: 31,
+          cuitInvalido: 41, sinCuit: 42, soloEtiquetas: 43,
+          fallbackTabla: 51
+        };
+        for (const [nombre, n] of Object.entries(escenarios)) {
+          bru.setVar('importe_' + nombre, (200000 + runId * 100 + n) + '.' + n);
+        }
+        console.log('[WAL973] runId=' + runId + ' | importes ' + (200000 + runId * 100) + '.xx');
+
+        // Token (client_credentials, scope MS-CASHIN).
+        // Las cuentas de prueba son datos de la base de homo: la API local tiene que
+        // levantarse con ASPNETCORE_ENVIRONMENT=HOMOLOGACION.
+        const identityUrl  = bru.getEnvVar('identityUrl');
+        const clientId     = bru.getEnvVar('clientId');
+        const clientSecret = bru.getEnvVar('clientSecret');
+
+        if (!identityUrl || !clientId || !clientSecret) {
+          throw new Error('[Auth] falta seleccionar un environment (local u homo)');
+        }
+
+        const axios = require('axios');
+        const tokenBody = 'grant_type=client_credentials'
+                        + '&client_id=' + encodeURIComponent(clientId)
+                        + '&client_secret=' + encodeURIComponent(clientSecret)
+                        + '&scope=MS-CASHIN';
+
+        const tokenRes = await axios.post(identityUrl + '/connect/token', tokenBody, {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        });
+
+        if (!tokenRes.data.access_token) {
+          throw new Error('[Auth] sin access_token: ' + JSON.stringify(tokenRes.data));
+        }
+        req.setHeader('Authorization', 'Bearer ' + tokenRes.data.access_token);

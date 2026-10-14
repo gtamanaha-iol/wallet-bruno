@@ -12,3 +12,11 @@ variables:
     name: token
   - name: bankAccountDestinationId
     value: "612898"
+  - name: usaWithdrawalAmount
+    value: "1"
+  - name: usaBankAccountId
+    value: ""
+  - name: usaIdempotencyKey
+    value: ""
+  - name: usaWithdrawalId
+    value: ""

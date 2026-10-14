@@ -1,0 +1,89 @@
+info:
+  name: 00 - Cuentas del exterior
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api/v1/international-bank-accounts"
+  headers:
+    - name: Content-Type
+      value: application/json
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        // Chequea que las cuentas configuradas en el environment sigan en el estado que los
+        // casos de prueba asumen. Si alguien las aprueba o las da de baja, los 422 esperados
+        // dejan de salir y conviene enterarse aca y no en el request que falla despues.
+        const esperados = {
+          usaBankAccountId: 'Accepted',
+          usaBankAccountIdPending: 'PendingVerification',
+          usaBankAccountIdRejected: 'Rejected'
+        };
+
+        const cuentas = Array.isArray(res.body) ? res.body : [];
+        const porId = new Map(cuentas.map(c => [String(c.bankAccountId), c]));
+
+        console.log(`[Cuentas] ${cuentas.length} cuenta(s) del exterior del cliente ${bru.getEnvVar('clientId')}`);
+        cuentas.forEach(c => console.log(`  ${c.bankAccountId} | ${c.accountStatus} | ${c.bankAccountNumber || '-'} | ${c.bankName || c.bankId || '-'}`));
+
+        const problemas = [];
+
+        for (const [variable, estadoEsperado] of Object.entries(esperados)) {
+          const id = String(bru.getEnvVar(variable) || '').trim();
+          if (!id) { problemas.push(`${variable} sin valor en el environment`); continue; }
+
+          const cuenta = porId.get(id);
+          if (!cuenta) { problemas.push(`${variable}=${id} no esta en las cuentas del cliente`); continue; }
+
+          const estado = String(cuenta.accountStatus || '');
+          if (estado.toLowerCase() !== estadoEsperado.toLowerCase()) {
+            problemas.push(`${variable}=${id} esta en ${estado}, se esperaba ${estadoEsperado}`);
+          }
+        }
+
+        // La cuenta de otro cliente no tiene que aparecer: si aparece, se la reasignaron y el
+        // caso 08 dejaria de probar el cruce entre clientes.
+        const ajena = String(bru.getEnvVar('usaBankAccountIdOtherClient') || '').trim();
+        if (ajena && porId.has(ajena)) problemas.push(`usaBankAccountIdOtherClient=${ajena} ahora es de este cliente`);
+
+        console.log('');
+        if (problemas.length) {
+          console.error('[Cuentas] la configuracion no coincide con homologacion:');
+          problemas.forEach(p => console.error(`  - ${p}`));
+        } else {
+          console.log('[Cuentas] configuracion OK, los casos 01-08 pueden correr');
+        }
+
+        bru.setVar('usaCuentasProblemas', problemas.length);
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: bru.getVar("usaCuentasProblemas")
+      operator: eq
+      value: "0"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  Lista las cuentas bancarias del exterior del cliente del token y **verifica** que las que
+  usan los casos siguientes sigan en el estado esperado:
+
+  | Variable | Estado esperado |
+  |---|---|
+  | `usaBankAccountId` | `Accepted` — destino del caso feliz |
+  | `usaBankAccountIdPending` | `PendingVerification` — caso 07 |
+  | `usaBankAccountIdRejected` | `Rejected` — caso 07 (variante) |
+  | `usaBankAccountIdOtherClient` | no debe aparecer — caso 08 |
+
+  No es un caso de prueba del endpoint de extraccion: es el guard del resto de la carpeta.
+  Los ids son fixtures de homologacion; si alguien les cambia el estado, este request falla
+  con el detalle por consola en vez de dejar que fallen los de abajo sin explicacion.

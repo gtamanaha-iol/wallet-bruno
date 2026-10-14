@@ -1,0 +1,54 @@
+info:
+  name: 05 - Alta (pendiente ticket service)
+  type: http
+  seq: 5
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/usa-withdrawals"
+  headers:
+    - name: Content-Type
+      value: application/json
+    - name: Idempotency-Key
+      value: "{{$guid}}"
+    - name: X-Client-Id
+      value: "537401"
+    - name: X-IOL-Client-Id
+      value: "537401"
+  body:
+    type: json
+    data: |-
+      {
+        "clientId": 537401, // 537401 - ATO: 436286 - 1201309
+        "bankAccountId": 71, // ATO: 436286:82 - 537401:81 Pending - 537401:71 Accepted - 537401:80 Rejected - 1201309:69
+        "amount": 333 // Saldo: 537401:29.539
+      }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  # 05 — Alta de extracción USA
+
+  ⏳ **Hoy responde 500.** El service de WAL-922 llama a `CreateAsync`, que sigue en
+  `NotImplementedException`. Queda armado para cuando el ticket del service lo conecte con
+  `CreateWithdrawalAsync`. Mientras tanto, el alta se prueba con el script SQL
+  `alta-transito-y-confirmacion-extraccion-usa.sql` (paso 1).
+
+  ## Esperado (una vez conectado)
+
+  | Caso | Respuesta |
+  |---|---|
+  | Alta nueva | 201 con `id` (= `ID_Cuenta_Movim`), estado FUNDS_HELD (2), `HechoXXX = 0` |
+  | Misma `Idempotency-Key`, mismo cliente | 201 con el **mismo** `id`, sin segunda fila |
+  | Misma key, otro cliente | 409 |
+  | Cliente sin cuenta USA | 400 |
+
+  `bankAccountId` es el `bank_account_id` de Balance.Alyc (Postgres).
+
+  `Idempotency-Key` usa `{{$guid}}`: una key nueva por corrida. Para probar la
+  idempotencia, reemplazarla por un valor fijo y mandar el request dos veces.

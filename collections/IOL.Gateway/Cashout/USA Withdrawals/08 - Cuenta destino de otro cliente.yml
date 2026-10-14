@@ -1,0 +1,58 @@
+info:
+  name: 08 - Cuenta destino de otro cliente
+  type: http
+  seq: 9
+
+http:
+  method: POST
+  url: "{{baseUrl}}/withdrawals/usa"
+  headers:
+    - name: Content-Type
+      value: application/json
+    - name: Idempotency-Key
+      value: "{{usaIdempotencyKeyTmp}}"
+  body:
+    type: json
+    data: |-
+      {
+        "amount": {{usaWithdrawalAmount}},
+        "bankAccountId": {{usaBankAccountIdOtherClient}}
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |-
+        bru.setVar('usaIdempotencyKeyTmp', `usa-ajena-${Date.now()}`);
+    - type: after-response
+      code: |-
+        const detail = (res.body && res.body.detail) || '';
+        console.log(`[Cuenta ajena] ${res.status} — ${detail || JSON.stringify(res.body)}`);
+
+        // El mensaje tiene que ser el de "no encontrada", no uno que delate que la cuenta
+        // existe y es de otro. Si cambia, se filtra informacion de otros clientes.
+        bru.setVar('usaNoFiltraExistencia', String(detail.includes('was not found')));
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "422"
+    - expression: bru.getVar("usaNoFiltraExistencia")
+      operator: eq
+      value: "true"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+  forwardAuthorizationHeader: true
+
+docs: |
+  Cuenta que **existe pero es de otro cliente** (`usaBankAccountIdOtherClient`).
+
+  Espera **422** con `"The bank account was not found."` — exactamente el mismo status y
+  mensaje que una cuenta inexistente, a proposito: asi el endpoint no permite descubrir que
+  ids existen probando numeros.
+
+  La segunda asercion es la que importa: si el mensaje cambiara a algo tipo *"no pertenece al
+  cliente"*, el 422 seguiria pasando pero el endpoint estaria filtrando informacion.

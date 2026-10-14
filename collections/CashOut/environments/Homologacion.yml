@@ -9,14 +9,17 @@ variables:
     value: http://localhost:5002
   - name: baseUrlHomo
     value: https://cashout-api.app.homo.invertironline.com
+  # Es el Authority que valida la API (`ApiIdentityServerConfig` del appsettings de
+  # homo). El identity viejo (identity-server-homologacion) tambien emite un token
+  # valido, pero este es el que corresponde.
   - name: identityUrl
-    value: https://identity-server-homologacion.invertironline.com
+    value: https://identity-server-sts.homo.invertironline.com
+  # El client `MS-CASHOUT` del appsettings NO sirve para pedir token: el STS de homo
+  # responde `invalid_client`. El que funciona es el del listener, verificado el
+  # 2026-09-18.
   - name: clientId
-    value: MS-CASHOUT
-  # Completar. Si el client MS-CASHOUT no esta a mano, se puede usar el client
-  # de pruebas GT-TEST (el mismo de la coleccion CashIn), siempre que tenga
-  # habilitado el scope MS-CASHOUT en el identity de homologacion.
+    value: C-CASHOUT-LISTENER-KAFKA
   - name: clientSecret
-    value: ""
+    value: 8d16cecb-4e60-04c6-5468-d2920bcf93c7
   - name: scope
     value: MS-CASHOUT
